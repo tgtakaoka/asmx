@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "Z-80 assembler version 1.7"
+#define version "Z-80 assembler version 1.7.1"
 #define maxOpcdLen  7		// max opcode legnth (for building opcode table)
 #define INSTR_MAX   5		// length of longest valid instruction (really 4 for Z-80)
 #define LITTLE_ENDIAN		// CPU is little-endian

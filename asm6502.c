@@ -8,8 +8,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "6502 assembler version 1.7"
-#define maxOpcdLen  9		// max opcode legnth (for building opcode table)
+#define version "6502 assembler version 1.7.1"
+#define maxOpcdLen  9		// max opcode length (for building opcode table)
 #define INSTR_MAX   5		// length of longest valid instruction
 #define LITTLE_ENDIAN		// CPU is little-endian
 

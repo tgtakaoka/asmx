@@ -729,8 +729,43 @@ Version 1.7 changes (2004-08-25)
 
  - - -
 
+Version 1.7.1 changes (2004-10-20)
+
+* Added exclusive-or ("^") to the expression evaluator.  This has the same
+  precedence as the existing AND and OR operators.
+
+* DB has been modified to handle the case of arithmetic parameters which
+  start with a single-quoted character, such as "DB 'X'+$80".
+
+* 6809 conditional long branches were off by one.
+
+* Changed 68HC11 assembler file name to all lowercase.
+
+* Found out that asm68hc11.c wasn't being included in the zip archive anyhow.
+
+* Added an F8 assembler back-end.  Since I have no real code to test this on,
+  it should be considered experimental.
+
+ - - -
+
 To do:
 
-* Some way to glue macro parameters to literals would be nice.
+* Some way to glue macro parameters to literals would be nice, kind of
+  like how '##' works in C macros.
 
 * Convert DW/DRW opcodes to use the BIG_ENDIAN / LITTLE_ENDIAN #define.
+
+* Implement REP (or REPEAT) pseudo-op.
+
+ - - -
+
+BUGS:
+
+* "Too many operands" unless extra newline after ENDM
+
+MNEM	MACRO	LBL,AA,BB,CC
+LBL	EQU	(.-MNEM_TBL)/2
+	DB	(((AA - '?') & $1F) << 3) + (((BB - '?') & $1C) >> 2)
+	DB	(((BB - '?') & $03) << 6) + (((CC - '?') & $1F) << 1)
+	ENDM
+ list macro

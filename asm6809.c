@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "6809 assembler version 1.7"
+#define version "6809 assembler version 1.7.1"
 #define maxOpcdLen  7		// max opcode legnth (for building opcode table)
 #define INSTR_MAX   5		// length of longest valid instruction
 #define BIG_ENDIAN			// CPU is big-endian
@@ -608,7 +608,8 @@ void DoOpcode(int typ, int parm)
 
 		case o_LRelative:
 			val = Eval();
-			val = val - locPtr - 3;
+			if (parm < 256)	val = val - locPtr - 3;
+					else	val = val - locPtr - 4;
 			XInstr3W(parm, val);
 			break;
 

@@ -1427,7 +1427,7 @@ int Eval0(void)
 
 	oldLine = linePtr;
 	token = GetWord(word);
-	while (token == '&' || token == '|' ||
+	while (token == '&' || token == '|' || token == '^' ||
 			(token == '<' && *linePtr == '<') ||
 			(token == '>' && *linePtr == '>'))
 	{
@@ -1438,6 +1438,8 @@ int Eval0(void)
 						break;
 			case '|':	if (*linePtr == '|') {linePtr++; val = (val | Eval1() != 0);}
 										else			 val =  val | Eval1();
+						break;
+			case '^':   val = val ^ Eval1();
 						break;
 			case '<':	linePtr++;	val = val << Eval1();	break;
 			case '>':	linePtr++;	val = val >> Eval1();	break;
@@ -1956,7 +1958,7 @@ void DoStdOpcode(int typ, int parm)
 
 			while (token)
 			{
-				if (token == '\'' || token == '"')
+				if ((token == '\'' && *linePtr && linePtr[1] != '\'') || token == '"')
 				{
 					quote = token;
 					while (token == quote)
