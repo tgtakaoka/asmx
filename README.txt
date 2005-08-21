@@ -56,7 +56,11 @@ To make this work, the assembler keeps an extra flag in the symbol
 table during the second pass, which tells if the symbol was known
 yet at this point in the first pass.  Then the assembler can know
 to use the longer form to avoid a phase error.  The 6809 assembler
-syntax uses "<" and ">" to override this decision.
+syntax uses "<" (force 8-bits) and ">" (force 16-bits) to override
+this decision.  The 6502 assembler can also override this with a
+">" before an absolute or absolute-indexed address operand.  Note
+that this usage is different from "<" and ">" as a high/low byte
+of a word value.
 
 Some assemblers like to output code in binary.  This might be nice
 if you're making a video game cartridge ROM, but it's really not
@@ -160,6 +164,11 @@ supported unary operations are:
   H(val)       high 8 bits of val; whitespace not allowed before '('
   L(val)       low 8 bits of val; whitespace not allowed before '('
 
+NOTE: with the Z-80, (expr), H(val), and L(val) are likely to not work
+at the start of an expression because of Z-80 operand syntax.  Likewise
+with the 6809, <val and >val may have special meaning at the start of
+an operand.
+
 Binary operations take two values and do something with them.  The
 supported binary operations are:
 
@@ -247,7 +256,8 @@ is after the "@" or "." to the last non-temporary code label defined so far,
 making a unique label.  Example: "@1", "@99", ".TEMP", and "@LOOP".  These
 can be used until the next non-local label, by using this short form.  They
 appear in the symbol table with a long form of "LABEL@1" or "LABEL.1", but
-can not be referenced by this full name.
+can not be referenced by this full name.  Local labels starting with a "."
+can also be defined as subroutine local, by using the SUBROUTINE pseudo-op.
 
 Comments may either be started with a "*" as the first non-blank character
 of a line, or with a ";" in the middle of the line.
@@ -395,6 +405,23 @@ OPT LIST / OPT NOLIST / OPT MACRO / OPT NOMACRO
   turn listing on and off, and to turn listing of macro expansion
   on and off.  The default is listing on, macro expansion off.
 
+SUB / SUBROUTINE name
+
+  This sets the scope for temporary labels beginning with a dot.
+  If no name is specified, temporary labels beginning with a dot
+  work just like the ones beginning with an '@'.
+
+  Example:
+
+               SUBROUTINE foo
+       .LABEL  NOP        ; this one becomes "FOO.LABEL"
+               SUBROUTINE bar
+       .LABEL  NOP        ; this one becomes "BAR.LABEL"
+               SUBROUTINE
+       LABEL
+       .LABEL  NOP        ; this one becomes "LABEL.LABEL"
+
+
 ERROR
 
   This prints a custom error message.
@@ -419,6 +446,17 @@ MACRO / ENDM
                MACRO plusfive parm
                DB    (parm)+5
                ENDM
+
+  Macro parameters can be inserted without surrounding whitespace
+  by using the '##' concatenation operator.
+
+     TEST      MACRO labl
+     labl ## 1 DB    1
+     labl ## 2 DB    2
+               ENDM
+
+               TEST  HERE ; labl ## 1 gets replaced with "HERE1"
+                          ; labl ## 2 gets replaced with "HERE2"
 
 IF expr / ELSE / ELSIF expr / ENDIF
 
@@ -748,24 +786,82 @@ Version 1.7.1 changes (2004-10-20)
 
  - - -
 
+Version 1.7.2 changes (2005-03-02)
+
+* Added the SUBROUTINE pseudo-op.
+
+* Added BLKB pseudo-op as an alias to DS.
+
+* Fixed a bug that would cause errors if the line after an ENDM
+  was not a blank line.
+
+* F8 assembler relative branches were off by one.
+
+* Other minor changes to F8 assembler, including allowing expressions for
+  register numbers in more places, and 'A' and 'B' as hex register numbers
+  when not inappropriate.
+
+* Tweaked symbol table output to show up to 19 characters of symbol names,
+  and to fit in 80 columns.
+
+* ENDIF lines and the guts of MACRO declarations did not respect the
+  LIST OFF setting.
+
+* Macro parameters can now be inserted without surrounding whitespace using
+  the '##' concatenation operator, similar to how it works in C macros.
+
+* 6502 assembler can now force absolute or absolute-indexed addressing mode
+  (instead of zero-page and zero-page-indexed) by using '>' in front of the
+  address, similar to how the 6809 does it.
+
+* When not using the -w option, warning lines would still print to the
+  console.
+
+* Z-80 assembler can now take parameters after a RST instruction, which are
+  interpreted as DB bytes.  Example:  RST 08H,'('
+
+* Fixed a bug that could cause phase errors if a forward-referenced label was
+  used with DW.
+
+* started work on REP pseudo-op (code still under construction)
+
+* Added an 1802 assembler back-end.
+
+* Added opcode table of common pseudo-ops to asmguts.h, and removed "DoStdOpcode"
+  pass-thru in order to keep more generic stuff out of the CPU-specific .c files.
+
+* CPU_BIG_ENDIAN/CPU_LITTLE_ENDIAN #define now automatically controls
+  DW/DRW opcodes and Instr3W/Instr4W/Instr5W calls.
+
+* Cleanups for GCC 4 stricter type checking: string signedness with Str255 type
+  and forward declaration of OpcdTab.
+
+* Short branch range check was allowing branches too far forward.
+
+* Z-80 assembler couldn't do "CP (a+b)/256" (or SUB, AND, OR, XOR) because it was
+  expecting "CP (HL)" etc.  Now it falls back and tries to evaluate the parens as
+  an immediate operand.
+
+* Added OPT NOEXPAND to disable expanding hex output for more than one listing line.
+
+* All standard pseudo-ops can now optionally start with a period, such as .DB, .DW,
+  .EQU, etc.
+
+* Standard pseudo-ops can start with a period in column 1.
+
+* Symbol table output handles long symbols better by stretching really long symbol
+  names into multiple columns.
+
+ - - -
+
 To do:
 
-* Some way to glue macro parameters to literals would be nice, kind of
-  like how '##' works in C macros.
+* Implement REP (or REPEAT) pseudo-op (currently under construction).
 
-* Convert DW/DRW opcodes to use the BIG_ENDIAN / LITTLE_ENDIAN #define.
-
-* Implement REP (or REPEAT) pseudo-op.
+* Implement multi-level nested macros.
 
  - - -
 
 BUGS:
 
-* "Too many operands" unless extra newline after ENDM
-
-MNEM	MACRO	LBL,AA,BB,CC
-LBL	EQU	(.-MNEM_TBL)/2
-	DB	(((AA - '?') & $1F) << 3) + (((BB - '?') & $1C) >> 2)
-	DB	(((BB - '?') & $03) << 6) + (((CC - '?') & $1F) << 1)
-	ENDM
- list macro
+(none currently known)

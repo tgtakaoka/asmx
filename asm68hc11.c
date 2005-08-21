@@ -1,4 +1,4 @@
-// asm68HC11.c - copyright 1998-2004 Bruce Tomlin
+// asm68HC11.c - copyright 1998-2005 Bruce Tomlin
 
 //#define DEBUG_PASS
 
@@ -8,70 +8,38 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "68HC11 assembler version 1.7.1"
-#define maxOpcdLen  9		// max opcode legnth (for building opcode table)
+#define versionName "68HC11 assembler"
 #define INSTR_MAX   5		// length of longest valid instruction
-#define BIG_ENDIAN			// CPU is big-endian
+#define CPU_BIG_ENDIAN      // CPU is big-endian
 
-enum instrType
+#include "asmguts.h"
+
+enum
 {
-	o_Illegal,	// opcode not found in FindOpcode
-	o_Inherent,	// implied instructions
+	o_Inherent,     // implied instructions
 	o_Inherent_01,	// implied instructions, 6801/6803/6811
 	o_Inherent_03,	// implied instructions, 6803 only
 	o_Inherent_11,	// implied instructions, 6811 only
-	o_Relative,	// branch instructions
-	o_Bit_03,   // 6303 AIM OIM EIM TIM instructions
-	o_Bit,		// 6811 BSET/BCLR
-	o_BRelative, // 6811 BRSET/BRCLR
-	o_Logical,  // instructions with multiple addressing modes
-	o_Arith,	// arithmetic instructions with multiple addressing modes
-	o_LArith,	// o_Arith instructions with 16-bit immediate modes
+	o_Relative,     // branch instructions
+	o_Bit_03,       // 6303 AIM OIM EIM TIM instructions
+	o_Bit,          // 6811 BSET/BCLR
+	o_BRelative,    // 6811 BRSET/BRCLR
+	o_Logical,      // instructions with multiple addressing modes
+	o_Arith,        // arithmetic instructions with multiple addressing modes
+	o_LArith,       // o_Arith instructions with 16-bit immediate modes
 	o_LArith_01,	// o_Arith instructions with 16-bit immediate modes, 6801/6803/6811
-	o_LArith_11,	// o_Arith instructions with 16-bit immediate modes, 6811 only
+	o_LArith_11,    // o_Arith instructions with 16-bit immediate modes, 6811 only
 
-	o_DB,		// DB pseudo-op
-	o_DWLE,		// DW pseudo-op (little endian)
-	o_DWBE,		// DW pseudo-op (big endian)
-	o_DS,		// DS pseudo-op
-	o_HEX,		// HEX pseudo-op
-	o_FCC,		// FCC pseudo-op
-	o_ALIGN,	// ALIGN pseudo-op
-
-	o_END,		// END pseudo-op
-	o_Include,  // INCLUDE pseudo-op
 	o_Processor,// PROCESSOR pseudo-op
 	o_CPUtype,  // cpu type pseudo-ops (.6502, etc.)
 
-	o_ENDM,		// ENDM pseudo-op
-	o_MacName,	// Macro name
-
-	o_LabelOp,	// the following pseudo-ops handle the label field specially
-	o_EQU,		// EQU and SET pseudo-ops
-	o_ORG,		// ORG pseudo-op
-	o_RORG,		// RORG pseudo-op
-	o_REND,		// REND pseudo-op
-	o_LIST,		// LIST pseudo-op
-	o_OPT,		// OPT pseudo-op
-	o_ERROR,	// ERROR pseudo-op
-	o_MACRO,	// MACRO pseudo-op
-	o_SEG,		// SEG pseudo-op
-
-	o_IF,		// IF <expr> pseudo-op
-	o_ELSE,		// ELSE pseudo-op
-	o_ELSIF,	// ELSIF <expr> pseudo-op
-	o_ENDIF		// ENDIF pseudo-op
+//  o_Foo = o_LabelOp,
 };
-
 
 enum cputype
 {
 	cpu_6800, cpu_6801, cpu_68HC11, cpu_6303
 } cpu;
-
-
-#include "asmguts.h"
-
 
 struct OpcdRec opcdTab[] =
 {
@@ -228,62 +196,6 @@ struct OpcdRec opcdTab[] =
 	{"EIM", o_Bit_03, 0x65},
 	{"TIM", o_Bit_03, 0x6B},
 
-	{"DB",   o_DB,  0},
-	{"FCB",  o_DB,  0},
-	{"BYTE", o_DB,  0},
-	{".BYTE",o_DB,  0},
-	{"DC.B", o_DB,  0},
-	{".DC.B",o_DB,  0},
-	{"DFB",  o_DB,  0},
-	{"DW",   o_DWBE,0},
-	{"FDB",  o_DWBE,0},
-	{"WORD", o_DWBE,0},
-	{".WORD",o_DWBE,0},
-	{"DC.W", o_DWBE,0},
-	{".DC.W",o_DWBE,0},
-	{"DA",   o_DWBE,0},
-	{"DRW",  o_DWLE,0},
-	{"DS",   o_DS,  1},
-	{"DS.B", o_DS,  1},
-	{".DS.B",o_DS,  1},
-	{"RMB",  o_DS,  1},
-	{"BLKB", o_DS,  1},
-	{"DS.W", o_DS,  2},
-	{".DS.W",o_DS,  2},
-	{"BLKW", o_DS,  2},
-	{"HEX",  o_HEX, 0},
-	{"FCC",  o_FCC, 0},
-	{"ALIGN",o_ALIGN,0},
-
-	{"=",    o_EQU, 0},
-	{"EQU",  o_EQU, 0},
-	{"SET",  o_EQU, 1},
-
-	{"ORG",  o_ORG,  0},
-	{".ORG", o_ORG,  0},
-	{"AORG", o_ORG,  0},
-	{"RORG", o_RORG, 0},
-	{"REND", o_REND, 0},
-	{"END",  o_END,  0},
-	{".END", o_END,  0},
-	{"LIST", o_LIST, 0},
-	{"OPT",  o_OPT,  0},
-	{"ERROR",o_ERROR,0},
-	{"MACRO",o_MACRO,0},
-	{".MACRO",o_MACRO,0},
-	{"ENDM", o_ENDM, 0},
-	{".ENDM",o_ENDM, 0},
-	{"SEG",  o_SEG,  1},
-	{"RSEG", o_SEG,  1},
-	{"SEG.U",o_SEG,  0},
-
-	{"IF",   o_IF,   0},
-	{"ELSE", o_ELSE, 0},
-	{"ELSIF",o_ELSIF,0},
-	{"ENDIF",o_ENDIF,0},
-
-	{"INCLUDE",o_Include,0},
-
 	{"PROCESSOR",o_Processor,0},
 	{"CPU",      o_Processor,0},
 	{".6800",    o_CPUtype,cpu_6800},
@@ -303,33 +215,6 @@ struct OpcdRec opcdTab[] =
 
 
 // --------------------------------------------------------------
-
-
-int FindReg(char *regName, const char *regList)
-{
-
-	const char	*p;
-	char		r0,r1;
-	int			reg;
-
-	r0 = regName[0];
-	r1 = regName[1];
-	if (r1 == 0) r1 = ' ';
-	else if (regName[2]) return -1;	// longer than 2 chars!
-
-	reg = 0;
-	p = regList;
-	while (*p)
-	{
-		if (r0 == p[0] && r1 == p[1])
-			return reg;
-
-		p = p + 2;
-		reg++;
-	}
-
-	return -1;
-}
 
 
 void XInstr1(int op)
@@ -355,8 +240,8 @@ void XInstr3(int op, unsigned char b1, unsigned char b2)
 
 void XInstr3W(int op, int w)
 {
-	if (op < 256)   Instr3BW(op, w);
-			else	Instr4BW(op >> 8, op & 255, w);
+	if (op < 256)   Instr3W(op, w);
+			else	Instr4W(op >> 8, op & 255, w);
 }
 
 
@@ -369,8 +254,8 @@ void XInstr4(int op, unsigned char b1, unsigned char b2, unsigned char b3)
 
 void XInstr4W(int op, unsigned char b, int w)
 {
-	if (op < 256)   Instr4BW(op, b, w);
-			else	Instr5BW(op >> 8, op & 255, b, w);
+	if (op < 256)   Instr4W(op, b, w);
+			else	Instr5W(op >> 8, op & 255, b, w);
 }
 
 
@@ -381,7 +266,7 @@ void BadMode()
 }
 
 
-void DoOpcode(int typ, int parm)
+int DoCPUOpcode(int typ, int parm)
 {
 	int		val,val2,val3;
 	Str255	word;
@@ -393,36 +278,20 @@ void DoOpcode(int typ, int parm)
 	switch(typ)
 	{
 		case o_Inherent_01:	// implied instructions, 6801/6803/6811
-			if (typ == o_Inherent_01 && cpu == cpu_6800)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (typ == o_Inherent_01 && cpu == cpu_6800) return 0;
 		case o_Inherent_03:	// implied instructions, 6803 only
-			if (typ == o_Inherent_03 && cpu != cpu_6303)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (typ == o_Inherent_03 && cpu != cpu_6303) return 0;
 		case o_Inherent_11:	// implied instructions, 6811 only
 			if (parm == 0x8F && cpu == cpu_6303)	// 6303 XGDX
 				parm = 0x18;
-			else if (typ == o_Inherent_11 && cpu != cpu_68HC11)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			else if (typ == o_Inherent_11 && cpu != cpu_68HC11) return 0;
 		case o_Inherent:
 			if ((parm & 0xF0FF) == 0xA0E0)	XInstr3W(0x3504,parm);
 									else	XInstr1(parm);
 			break;
 
 		case o_Relative:
-			if (parm == 0x21 && cpu == cpu_6800)	// BRN
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (parm == 0x21 && cpu == cpu_6800) return 0;	// BRN
 			val = EvalBranch(2);
 			XInstr2(parm,val);
 			break;
@@ -463,17 +332,9 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		case o_LArith_01:
-			if (typ == o_LArith_01 && cpu == cpu_6800)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (typ == o_LArith_01 && cpu == cpu_6800) return 0;
 		case o_LArith_11:
-			if (typ == o_LArith_11 && cpu != cpu_68HC11)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (typ == o_LArith_11 && cpu != cpu_68HC11) return 0;
 		case o_Arith:
 		case o_LArith:
 			oldLine = linePtr;
@@ -548,11 +409,7 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		case o_Bit_03:
-			if (cpu != cpu_6303)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (cpu != cpu_6303) return 0;
 			// need to implement AIM/OIM/EIM/TIM
 			// opcode #,ofs,X (3 bytes)
 			// opcode #,dir  (3 bytes)
@@ -578,11 +435,7 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		case o_Bit:
-			if (cpu != cpu_68HC11)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (cpu != cpu_68HC11) return 0;
 
 			val = Eval();   // direct page address or offset
 			reg = 0;
@@ -626,11 +479,7 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		case o_BRelative:
-			if (cpu != cpu_68HC11)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (cpu != cpu_68HC11) return 0;
 
 			val = Eval();   // direct page address or offset
 			reg = 0;
@@ -702,21 +551,31 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		default:
-			DoStdOpcode(typ, parm);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
-void DoLabelOp(int typ, int parm, char *labl)
+int DoCPULabelOp(int typ, int parm, char *labl)
 {
-	DoStdLabelOp(typ, parm, labl);
+//	int		i,val;
+//	Str255  word;
+
+	switch(typ)
+	{
+		default:
+			return 0;
+			break;
+	}
+    return 1;
 }
 
 
 void usage(void)
 {
-	fprintf(stderr,version);
+	stdversion();
 	stdusage();
 	exit(1);
 }

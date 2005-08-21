@@ -1,4 +1,4 @@
-// asm6809.c - copyright 1998-2004 Bruce Tomlin
+// asm6809.c - copyright 1998-2005 Bruce Tomlin
 
 //#define DEBUG_PASS
 
@@ -8,14 +8,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "6809 assembler version 1.7.1"
-#define maxOpcdLen  7		// max opcode legnth (for building opcode table)
+#define versionName "6809 assembler"
 #define INSTR_MAX   5		// length of longest valid instruction
-#define BIG_ENDIAN			// CPU is big-endian
+#define CPU_BIG_ENDIAN      // CPU is big-endian
 
-enum instrType
+#include "asmguts.h"
+
+enum
 {
-	o_Illegal,		// opcode not found in FindOpcode
 	o_Inherent,		// implied instructions
 	o_Immediate,	// immediate instructions
 	o_Relative,		// branch instructions
@@ -27,42 +27,8 @@ enum instrType
 	o_Arith,		// arithmetic instructions with multiple addressing modes
 	o_LArith,		// o_Arith instructions with 16-bit immediate modes
 
-	o_DB,		// DB pseudo-op
-	o_DWLE,		// DW pseudo-op (little endian)
-	o_DWBE,		// DW pseudo-op (big endian)
-	o_DS,		// DS pseudo-op
-	o_HEX,		// HEX pseudo-op
-	o_FCC,		// FCC pseudo-op
-	o_ALIGN,	// ALIGN pseudo-op
-
-	o_END,		// END pseudo-op
-	o_Include,  // INCLUDE pseudo-op
-
-	o_ENDM,		// ENDM pseudo-op
-	o_MacName,	// Macro name
-
-	o_LabelOp,	// the following pseudo-ops handle the label field specially
-	o_EQU,		// EQU and SET pseudo-ops
-	o_ORG,		// ORG pseudo-op
-	o_RORG,		// RORG pseudo-op
-	o_REND,		// REND pseudo-op
-	o_LIST,		// LIST pseudo-op
-	o_OPT,		// OPT pseudo-op
-	o_ERROR,	// ERROR pseudo-op
-	o_MACRO,	// MACRO pseudo-op
-	o_SEG,		// SEG pseudo-op
-
-	o_SETDP,	// SETDP pseudo-op
-
-	o_IF,		// IF <expr> pseudo-op
-	o_ELSE,		// ELSE pseudo-op
-	o_ELSIF,	// ELSIF <expr> pseudo-op
-	o_ENDIF		// ENDIF pseudo-op
+	o_SETDP = o_LabelOp	// SETDP pseudo-op
 };
-
-
-#include "asmguts.h"
-
 
 struct OpcdRec opcdTab[] =
 {
@@ -216,62 +182,7 @@ struct OpcdRec opcdTab[] =
 	{"CMPU" , o_LArith, 0x1183},
 	{"CMPS" , o_LArith, 0x118C},
 
-	{"DB",   o_DB,  0},
-	{"FCB",  o_DB,  0},
-	{"BYTE", o_DB,  0},
-	{".BYTE",o_DB,  0},
-	{"DC.B", o_DB,  0},
-	{".DC.B",o_DB,  0},
-	{"DFB",  o_DB,  0},
-	{"DW",   o_DWBE,0},
-	{"FDB",  o_DWBE,0},
-	{"WORD", o_DWBE,0},
-	{".WORD",o_DWBE,0},
-	{"DC.W", o_DWBE,0},
-	{".DC.W",o_DWBE,0},
-	{"DA",   o_DWBE,0},
-	{"DRW",  o_DWLE,0},
-	{"DS",   o_DS,  1},
-	{"DS.B", o_DS,  1},
-	{".DS.B",o_DS,  1},
-	{"RMB",  o_DS,  1},
-	{"BLKB", o_DS,  1},
-	{"DS.W", o_DS,  2},
-	{".DS.W",o_DS,  2},
-	{"BLKW", o_DS,  2},
-	{"HEX",  o_HEX, 0},
-	{"FCC",  o_FCC, 0},
-	{"ALIGN",o_ALIGN,0},
-
-	{"=",    o_EQU, 0},
-	{"EQU",  o_EQU, 0},
-	{"SET",  o_EQU, 1},
 	{"SETDP",o_SETDP,0},
-
-	{"ORG",  o_ORG,  0},
-	{".ORG", o_ORG,  0},
-	{"AORG", o_ORG,  0},
-	{"RORG", o_RORG, 0},
-	{"REND", o_REND, 0},
-	{"END",  o_END,  0},
-	{".END", o_END,  0},
-	{"LIST", o_LIST, 0},
-	{"OPT",  o_OPT,  0},
-	{"ERROR",o_ERROR,0},
-	{"MACRO",o_MACRO,0},
-	{".MACRO",o_MACRO,0},
-	{"ENDM", o_ENDM, 0},
-	{".ENDM",o_ENDM, 0},
-	{"SEG",  o_SEG,  1},
-	{"RSEG", o_SEG,  1},
-	{"SEG.U",o_SEG,  0},
-
-	{"IF",   o_IF,   0},
-	{"ELSE", o_ELSE, 0},
-	{"ELSIF",o_ELSIF,0},
-	{"ENDIF",o_ENDIF,0},
-
-	{"INCLUDE",o_Include,0},
 
 // 6800 compatiblity opcodes
 
@@ -299,12 +210,12 @@ struct OpcdRec opcdTab[] =
 	{"TSX",  o_Inherent, 0x1F41},	// TFR S,X
 	{"TXS",  o_Inherent, 0x1F14},	// TFR X,S
 	{"WAI",  o_Inherent, 0x3CFF},	// CWAI #$FF
-	{"LDAA", o_Arith,   0x86},		// alternate mnemonic for LDA
-	{"STAA", o_Arith,   0x97},		// alternate mnemonic for STA
-	{"LDAB", o_Arith,   0xC6},		// alternate mnemonic for LDB
-	{"STAB", o_Arith,   0xD7},		// alternate mnemonic for STB
-	{"ORAA", o_Arith,   0x8A},		// alternate mnemonic for ORA
-	{"ORAB", o_Arith,   0xCA},		// alternate mnemonic for ORB
+	{"LDAA", o_Arith,    0x86},		// alternate mnemonic for LDA
+	{"STAA", o_Arith,    0x97},		// alternate mnemonic for STA
+	{"LDAB", o_Arith,    0xC6},		// alternate mnemonic for LDB
+	{"STAB", o_Arith,    0xD7},		// alternate mnemonic for STB
+	{"ORAA", o_Arith,    0x8A},		// alternate mnemonic for ORA
+	{"ORAB", o_Arith,    0xCA},		// alternate mnemonic for ORB
 
 // 6801 compatibility opcodes
 
@@ -313,8 +224,8 @@ struct OpcdRec opcdTab[] =
 	{"LSLD", o_Inherent, 0x5849},	// ASLB / ROLA
 	{"PULX", o_Inherent, 0x3410},	// PULS X
 	{"PSHX", o_Inherent, 0x3510},	// PSHS X
-	{"LDAD", o_LArith,  0xCC},		// alternate mnemonic for LDD
-	{"STAD", o_Arith,   0xDD},		// alternate mnemonic for STD
+	{"LDAD", o_LArith,   0xCC},		// alternate mnemonic for LDD
+	{"STAD", o_Arith,    0xDD},		// alternate mnemonic for STD
 
 	{"",     o_Illegal, 0}
 };
@@ -324,7 +235,7 @@ const char tfrRegs[] = "D X Y U S PC    A B CCDP";
 const char pshRegs[] = "CCA B DPX Y U PCD S ";
 const char idxRegs[] = "X Y U S ";
 
-unsigned char dpReg;
+u_char dpReg;
 
 
 // --------------------------------------------------------------
@@ -364,14 +275,14 @@ void XInstr1(int op)
 }
 
 
-void XInstr2(int op, unsigned char b)
+void XInstr2(int op, u_char b)
 {
 	if (op < 256)   Instr2(op, b);
 			else	Instr3(op >> 8, op & 255, b);
 }
 
 
-void XInstr3(int op, unsigned char b1, unsigned char b2)
+void XInstr3(int op, u_char b1, u_char b2)
 {
 	if (op < 256)   Instr3(op, b1, b2);
 			else	Instr4(op >> 8, op & 255, b1, b2);
@@ -380,15 +291,15 @@ void XInstr3(int op, unsigned char b1, unsigned char b2)
 
 void XInstr3W(int op, int w)
 {
-	if (op < 256)   Instr3BW(op, w);
-			else	Instr4BW(op >> 8, op & 255, w);
+	if (op < 256)   Instr3W(op, w);
+			else	Instr4W(op >> 8, op & 255, w);
 }
 
 
-void XInstr4W(int op, unsigned char b, int w)
+void XInstr4W(int op, u_char b, int w)
 {
-	if (op < 256)   Instr4BW(op, b, w);
-			else	Instr5BW(op >> 8, op & 255, b, w);
+	if (op < 256)   Instr4W(op, b, w);
+			else	Instr5W(op >> 8, op & 255, b, w);
 }
 
 
@@ -571,7 +482,7 @@ void DoIndex(int idxOp, int dirOp, int extOp)
 }
 
 
-void DoOpcode(int typ, int parm)
+int DoCPUOpcode(int typ, int parm)
 {
 	int		val;
 	int		reg1,reg2;
@@ -705,13 +616,14 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		default:
-			DoStdOpcode(typ, parm);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
-void DoLabelOp(int typ, int parm, char *labl)
+int DoCPULabelOp(int typ, int parm, char *labl)
 {
 	int		i,val;
 	Str255  word;
@@ -744,15 +656,16 @@ void DoLabelOp(int typ, int parm, char *labl)
 			break;
 
 		default:
-			DoStdLabelOp(typ, parm, labl);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
 void usage(void)
 {
-	fprintf(stderr,version);
+	stdversion();
 	stdusage();
 	exit(1);
 }

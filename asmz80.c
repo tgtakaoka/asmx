@@ -6,14 +6,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "Z-80 assembler version 1.7.1"
-#define maxOpcdLen  7		// max opcode legnth (for building opcode table)
+#define versionName "Z-80 assembler"
 #define INSTR_MAX   5		// length of longest valid instruction (really 4 for Z-80)
-#define LITTLE_ENDIAN		// CPU is little-endian
+#define CPU_LITTLE_ENDIAN   // CPU is little-endian
 
-enum instrType
+#include "asmguts.h"
+
+enum
 {
-	o_Illegal,	// Opcode not found in FindOpcode
 	o_None,		// No operands
 	o_LD,		// Generic LD opcode
 	o_EX,		// Generic EX opcode
@@ -32,40 +32,10 @@ enum instrType
 	o_Bit,		// BIT, RES, and SET instructions
 	o_IM,		// IM instruction
 	o_DJNZ,		// DJNZ instruction
-	o_RST,		// RST instruction
+	o_RST		// RST instruction
 
-	o_DB,		// DB pseudo-op
-	o_DWLE,		// DW pseudo-op
-	o_DWBE,		// big-endian DW
-	o_DS,		// DS pseudo-op
-	o_HEX,		// HEX pseudo-op
-	o_FCC,		// FCC pseudo-op
-	o_ALIGN,	// ALIGN pseudo-op
-
-	o_END,		// END pseudo-op
-	o_Include,  // INCLUDE pseudo-op
-
-	o_ENDM,		// ENDM pseudo-op
-	o_MacName,	// Macro name
-
-	o_LabelOp,	// the following pseudo-ops handle the label field specially
-	o_EQU,		// EQU and SET pseudo-ops
-	o_ORG,		// ORG pseudo-op
-	o_RORG,		// RORG pseudo-op
-	o_REND,		// REND pseudo-op
-	o_LIST,		// LIST pseudo-op
-	o_OPT,		// OPT pseudo-op
-	o_ERROR,	// ERROR pseudo-op
-	o_MACRO,	// MACRO pseudo-op
-	o_SEG,		// SEG pseudo-op
-
-	o_IF,		// IF <expr> pseudo-op
-	o_ELSE,		// ELSE pseudo-op
-	o_ELSIF,	// ELSIF <expr> pseudo-op
-	o_ENDIF		// ENDIF pseudo-op
+//  o_Foo = o_LabelOp,
 };
-
-#include "asmguts.h"
 
 const char conds[] = "NZZ NCC POPEP M ";
 // NZ=0 Z=1 NC=2 C=3 PO=4 PE=5 P=6 M=7
@@ -177,62 +147,6 @@ struct OpcdRec opcdTab[] =
 
 	{"RST",	o_RST,		0},
 
-	{"DB",	o_DB,		0},
-	{"FCB", o_DB,       0},
-	{"BYTE",o_DB,       0},
-	{".BYTE",o_DB,      0},
-	{"DC.B",o_DB,       0},
-	{".DC.B",o_DB,		0},
-	{"DFB", o_DB,		0},
-	{"DW",	o_DWLE,		0},
-	{"FDB", o_DWLE,     0},
-	{"WORD",o_DWLE,     0},
-	{".WORD",o_DWLE,    0},
-	{"DC.W",o_DWLE,     0},
-	{".DC.W",o_DWLE,	0},
-	{"DA",  o_DWLE,		0},
-	{"DRW",	o_DWBE,		0},
-	{"DS",	o_DS,		1},
-	{"DS.B", o_DS,		1},
-	{".DS.B",o_DS,		1},
-	{"RMB", o_DS,       1},
-	{"DS.W", o_DS,		2},
-	{".DS.W",o_DS,		2},
-	{"BLKW", o_DS,		2},
-	{"HEX", o_HEX,      0},
-	{"FCC", o_FCC,      0},
-	{"ALIGN",o_ALIGN,   0},
-
-	{"=",	o_EQU,		0},
-	{"EQU",	o_EQU,		0},
-	{"SET",	o_EQU,		1},
-	{"DEFL",o_EQU,		1},
-
-	{"ORG",	 o_ORG,		0},
-	{".ORG", o_ORG,		0},
-	{"AORG", o_ORG,		0},
-	{"RORG", o_RORG,	0},
-	{"REND", o_REND,	0},
-	{"END",	 o_END,		0},
-	{".END", o_END,		0},
-	{"LIST", o_LIST,	0},
-	{"OPT",	 o_OPT,		0},
-	{"ERROR",o_ERROR,   0},
-	{"MACRO",o_MACRO,   0},
-	{".MACRO",o_MACRO,  0},
-	{"ENDM", o_ENDM,	0},
-	{".ENDM",o_ENDM,	0},
-	{"SEG",  o_SEG,     1},
-	{"RSEG", o_SEG,     1},
-	{"SEG.U",o_SEG,     0},
-
-	{"IF",   o_IF,		0},
-	{"ELSE", o_ELSE,	0},
-	{"ELSIF",o_ELSIF,   0},
-	{"ENDIF",o_ENDIF,   0},
-
-	{"INCLUDE",o_Include,0},
-
 	{"",	o_Illegal,  0}
 };
 
@@ -269,21 +183,25 @@ int FindReg(char *regName, const char *regList)
 
 int IXOffset()
 {
+	char    *oldLine;
 	Str255	word;
 	int		token;
 	int		val;
 
+    oldLine = linePtr;
 	token = GetWord(word);
 
-	if (token == ')')
-		val = 0;
-	else if (token == '+' || token == '-')
+    val = 0;
+
+    if (token == '+' || token == '-')
 	{
 		val = Eval();
 		if (token == '-')
 			val = -val;
-         RParen();
 	}
+    else linePtr = oldLine;
+
+    RParen();
 
 	return val;
 }
@@ -336,7 +254,10 @@ void DoArith(int imm, int reg)
 					break;
 
 				default:
-					IllegalOperand();
+                    // must be constant "(expression)" so try again that way
+                    linePtr = oldLine;
+                    val = Eval();
+                    Instr2(imm,val);
 			}
           	break;
 
@@ -346,7 +267,7 @@ void DoArith(int imm, int reg)
 }
 
 
-void DoOpcode(int typ, int parm)
+int DoCPUOpcode(int typ, int parm)
 {
 	int		val;
 	int		reg1;
@@ -1048,17 +969,39 @@ void DoOpcode(int typ, int parm)
 				Instr1(0xC7 + val*8);
 			else if ((val & 0xC7) == 0)	// [$08,$10,$18,$20,$28,$30,$38]
 				Instr1(0xC7 + val);
-            else IllegalOperand();
+            else
+            {
+                IllegalOperand();
+                break;
+            }
+
+            // allow bytes to follow the RST address because
+            // RST vectors are used this way so much
+            oldLine = line;
+            token = GetWord(word);
+            if (token == ',')
+            {
+                bytStr[0] = instr[0];   // copy the instruction to bytStr for the pseudo-DB
+                while (token == ',' && instrLen < MAX_BYTSTR)
+                {
+                    bytStr[instrLen++] = Eval();
+                    oldLine = line;
+                    token = GetWord(word);
+                }
+                instrLen = -instrLen;   // negative means we're using bytStr instead of instr
+            }
+            if (token) linePtr = oldLine;  // ensure a too many operands error
         	break;
 
 		default:
-			DoStdOpcode(typ, parm);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
-void DoLabelOp(int typ, int parm, char *labl)
+int DoCPULabelOp(int typ, int parm, char *labl)
 {
 //	int		i,val;
 //	Str255  word;
@@ -1066,15 +1009,16 @@ void DoLabelOp(int typ, int parm, char *labl)
 	switch(typ)
 	{
 		default:
-			DoStdLabelOp(typ, parm, labl);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
 void usage(void)
 {
-	fprintf(stderr,version);
+	stdversion();
 	stdusage();
 	exit(1);
 }

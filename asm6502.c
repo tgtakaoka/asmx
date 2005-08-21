@@ -1,4 +1,4 @@
-// asm6502.c - copyright 1998-2004 Bruce Tomlin
+// asm6502.c - copyright 1998-2005 Bruce Tomlin
 
 //#define DEBUG_PASS
 
@@ -8,14 +8,14 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define version "6502 assembler version 1.7.1"
-#define maxOpcdLen  9		// max opcode length (for building opcode table)
+#define versionName "6502 assembler"
 #define INSTR_MAX   5		// length of longest valid instruction
-#define LITTLE_ENDIAN		// CPU is little-endian
+#define CPU_LITTLE_ENDIAN   // CPU is little-endian
 
-enum instrType
+#include "asmguts.h"
+
+enum
 {
-	o_Illegal,	// opcode not found in FindOpcode
 	o_Implied,	// implied instructions
 //	o_Implied_6502, // implied instructions for 6502 only
 	o_Implied_65C02, // implied instructions for 65C02 only
@@ -27,42 +27,12 @@ enum instrType
 	o_Mode_6502U, // o_Mode for undocumented 6502
 	o_RSMB,		// RMBn/SMBn instructions for 65C02 only
 	o_BBRS,		// BBRn/BBSn instructions for 65C02 only
-	o_DB,		// DB pseudo-op
-	o_DWLE,		// DW pseudo-op
-	o_DWBE,		// big-endian DW
-	o_DS,		// DS pseudo-op
-	o_HEX,		// HEX pseudo-op
-	o_FCC,		// FCC pseudo-op
-	o_ALIGN,	// ALIGN pseudo-op
 
-	o_END,		// END pseudo-op
-	o_Include,  // INCLUDE pseudo-op
-	o_Processor,// PROCESSOR pseudo-op
-	o_CPUtype,  // cpu type pseudo-ops (.6502, etc.)
+	o_Processor, // PROCESSOR pseudo-op
+	o_CPUtype  // cpu type pseudo-ops (.6502, etc.)
 
-	o_ENDM,		// ENDM pseudo-op
-	o_MacName,	// Macro name
-
-	o_LabelOp,	// the following pseudo-ops handle the label field specially
-	o_EQU,		// EQU and SET pseudo-ops
-	o_ORG,		// ORG pseudo-op
-	o_RORG,		// RORG pseudo-op
-	o_REND,		// REND pseudo-op
-	o_LIST,		// LIST pseudo-op
-	o_OPT,		// OPT pseudo-op
-	o_ERROR,	// ERROR pseudo-op
-	o_MACRO,	// MACRO pseudo-op
-	o_SEG,		// SEG pseudo-op
-
-	o_IF,		// IF <expr> pseudo-op
-	o_ELSE,		// ELSE pseudo-op
-	o_ELSIF,	// ELSIF <expr> pseudo-op
-	o_ENDIF		// ENDIF pseudo-op
+//  o_Foo = o_LabelOp,
 };
-
-
-#include "asmguts.h"
-
 
 enum cputype
 {
@@ -277,62 +247,6 @@ struct OpcdRec opcdTab[] =
 	{"SBC",  o_Mode, o_SBC},
 	{"INC",  o_Mode, o_INC},
 
-	{"DB",   o_DB,  0},
-	{"FCB",  o_DB,  0},
-	{"BYTE", o_DB,  0},
-	{".BYTE",o_DB,  0},
-	{"DC.B", o_DB,  0},
-	{".DC.B",o_DB,  0},
-	{"DFB",  o_DB,  0},
-	{"DW",   o_DWLE,0},
-	{"FDB",  o_DWLE,0},
-	{"WORD", o_DWLE,0},
-	{".WORD",o_DWLE,0},
-	{"DC.W", o_DWLE,0},
-	{".DC.W",o_DWLE,0},
-	{"DA",   o_DWLE,0},
-	{"DRW",  o_DWBE,0},
-	{"DS",   o_DS,  1},
-	{"DS.B", o_DS,  1},
-	{".DS.B",o_DS,  1},
-	{"RMB",  o_DS,  1},
-	{"BLKB", o_DS,  1},
-	{"DS.W", o_DS,  2},
-	{".DS.W",o_DS,  2},
-	{"BLKW", o_DS,  2},
-	{"HEX",  o_HEX, 0},
-	{"FCC",  o_FCC, 0},
-	{"ALIGN",o_ALIGN,0},
-
-	{"=",    o_EQU, 0},
-	{"EQU",  o_EQU, 0},
-	{"SET",  o_EQU, 1},
-
-	{"ORG",  o_ORG,  0},
-	{".ORG", o_ORG,  0},
-	{"AORG", o_ORG,  0},
-	{"RORG", o_RORG, 0},
-	{"REND", o_REND, 0},
-	{"END",  o_END,  0},
-	{".END", o_END,  0},
-	{"LIST", o_LIST, 0},
-	{"OPT",  o_OPT,  0},
-	{"ERROR",o_ERROR,0},
-	{"MACRO",o_MACRO,0},
-	{".MACRO",o_MACRO,0},
-	{"ENDM", o_ENDM, 0},
-	{".ENDM",o_ENDM, 0},
-	{"SEG",  o_SEG,  1},
-	{"RSEG", o_SEG,  1},
-	{"SEG.U",o_SEG,  0},
-
-	{"IF",   o_IF,   0},
-	{"ELSE", o_ELSE, 0},
-	{"ELSIF",o_ELSIF,0},
-	{"ENDIF",o_ENDIF,0},
-
-	{"INCLUDE",o_Include,0},
-
 	{"PROCESSOR",o_Processor,0},
 	{"CPU",      o_Processor,0},
 	{".6502",    o_CPUtype,cpu_6502},
@@ -415,7 +329,7 @@ struct OpcdRec opcdTab[] =
 // --------------------------------------------------------------
 
 
-void DoOpcode(int typ, int parm)
+int DoCPUOpcode(int typ, int parm)
 {
 	int		val;
 	int		i;
@@ -424,6 +338,7 @@ void DoOpcode(int typ, int parm)
 	int		token;
 //	char	ch;
 //	bool	done;
+	bool	forceabs;
 	int		opcode;
 	int		mode;
 	const unsigned char	*modes;		// pointer to current o_Mode instruction's opcodes
@@ -431,51 +346,27 @@ void DoOpcode(int typ, int parm)
 	switch(typ)
 	{
 		case o_Implied_65C02:
-			if (cpu == cpu_6502)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (cpu == cpu_6502) return 0;
 		case o_Implied_6502U:
-			if (typ == o_Implied_6502U && cpu != cpu_6502U)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
-/*		case o_Implied_6502:
-			if (typ == o_Implied_6502 && cpu != cpu_6502)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}		
-*/		case o_Implied:
+			if (typ == o_Implied_6502U && cpu != cpu_6502U) return 0;
+//		case o_Implied_6502:
+//			if (typ == o_Implied_6502 && cpu != cpu_6502) return 0;
+		case o_Implied:
 			if (parm > 256) Instr2(parm >> 8, parm & 255);
 					else	Instr1(parm);
 			break;
 
 		case o_Branch_65C02:
-			if (cpu == cpu_6502)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (cpu == cpu_6502) return 0;
 		case o_Branch:
 			val = EvalBranch(2);
 			Instr2(parm,val);
 			break;
 
 		case o_Mode_6502U:
-			if (cpu != cpu_6502U)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}		
+			if (cpu != cpu_6502U) return 0;
 		case o_Mode_65C02:
-			if (typ == o_Mode_65C02 && cpu != cpu_65C02)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}		
+			if (typ == o_Mode_65C02 && cpu != cpu_65C02) return 0;
 		case o_Mode:
 			instrLen = 0;
 			oldLine = linePtr;
@@ -499,14 +390,14 @@ void DoOpcode(int typ, int parm)
 						break;
 
 					case '[':	// indirect (this is a 6809ism that I got used to)
-						val  = Eval();
+						val = Eval();
 						// should probably also handle 65C02 (abs,X) here
 						Expect("]");
 						mode = a_Ind;
 						break;
 
 					case '(':	// indirect X,Y
-						val  = Eval();
+						val   = Eval();
 						token = GetWord(word);
 						switch (token)
 						{
@@ -542,39 +433,44 @@ void DoOpcode(int typ, int parm)
 
 					default:	// everything else
 						if ((word[1] == 0) && (toupper(word[0]) == 'A'))
-						{
+						{		// accumulator
 							token = GetWord(word);
 							if (token == 0)		// mustn't have anything after the 'A'
 								mode = a_Acc;
 						}
-						else
+						else	// absolute and absolute-indexed
 						{
-							linePtr = oldLine;
+							// allow '>' in front of address to force absolute addressing
+							// modes instead of zero-page addressing modes
+							forceabs = FALSE;
+							if (token == '>')	forceabs = TRUE;
+										else	linePtr = oldLine;
+
 							val   = Eval();
 							token = GetWord(word);
 
 							switch(token)
 							{
 								case 0:		// abs or zpg
-									if (val >= 0 && val < 256 && evalKnown &&
-										(modes[a_Zpg] != 0))
+									if (val >= 0 && val < 256&& !forceabs &&
+										evalKnown && (modes[a_Zpg] != 0))
 												mode = a_Zpg;
 										else	mode = a_Abs;
 									break;
 
-								case ',':
+								case ',':   // indexed ,x or ,y
 									token = GetWord(word);
 
 									if ((word[1] == 0) && (toupper(word[0]) == 'X'))
 									{
-										if (val >= 0 && val < 256 &&
+										if (val >= 0 && val < 256 && !forceabs &&
 											(evalKnown || modes[a_Abx] == 0))
 													mode = a_Zpx;
 											else	mode = a_Abx;
 									}
 									else if ((word[1] == 0) && (toupper(word[0]) == 'Y'))
 									{
-										if (val >= 0 && val < 256 &&
+										if (val >= 0 && val < 256 && !forceabs &&
 											(evalKnown || modes[a_Aby] == 0)
 												&& modes[a_Zpy] != 0)
 													mode = a_Zpy;
@@ -585,6 +481,7 @@ void DoOpcode(int typ, int parm)
 				}
 			}
 
+            opcode = 0;
 			if (mode != a_None)
 			{
 				opcode = modes[mode];
@@ -639,11 +536,7 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		case o_RSMB:		//    RMBn/SMBn instructions
-			if (cpu == cpu_6502)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+			if (cpu == cpu_6502) return 0;
 
 			// RMB/SMB zpg
 			val = Eval();
@@ -652,10 +545,7 @@ void DoOpcode(int typ, int parm)
 
 		case o_BBRS:		//    BBRn/BBSn instructions
 			if (cpu == cpu_6502)
-			{
-				DoStdOpcode(typ, parm); // pass the buck to get "unknown opcode"
-				break;
-			}
+				return 0; // pass the buck to get "unknown opcode"
 
 			i = Eval();
 			Expect(",");
@@ -679,13 +569,14 @@ void DoOpcode(int typ, int parm)
 			break;
 
 		default:
-			DoStdOpcode(typ, parm);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
-void DoLabelOp(int typ, int parm, char *labl)
+int DoCPULabelOp(int typ, int parm, char *labl)
 {
 //	int		i,val;
 //	Str255  word;
@@ -693,15 +584,16 @@ void DoLabelOp(int typ, int parm, char *labl)
 	switch(typ)
 	{
 		default:
-			DoStdLabelOp(typ, parm, labl);
+			return 0;
 			break;
 	}
+    return 1;
 }
 
 
 void usage(void)
 {
-	fprintf(stderr,version);
+	stdversion();
 	stdusage();
 	exit(1);
 }

@@ -1,4 +1,4 @@
-// asmguts.h - copyright 1998-2004 Bruce Tomlin
+// asmguts.h - copyright 1998-2005 Bruce Tomlin
 
 //#include <stdio.h>
 //#include <ctype.h>
@@ -8,25 +8,58 @@
 //#include "asmcfg.h"
 //#include "asmguts.h"
 
+//#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
+
+#define versionNum "1.7.2"
+#define copyright "Copyright 1998-2005 Bruce Tomlin"
 #define IHEX_SIZE	32			// max number of data bytes per line in intel hex format
-#define maxSymLen	16			// max symbol length (only used in DumpSym())
+#define MAXSYMLEN	19			// max symbol length (only used in DumpSym())
 const int symTabCols = 3;		// number of columns for symbol table dump
-#define maxMacParms	30			// maximum macro parameters
+#define MAXMACPARMS	30			// maximum macro parameters
 #define MAX_INCLUDE 10			// maximum INCLUDE nesting level
 #define MAX_BYTSTR  1024		// size of bytStr[]
 #define MAX_COND	256			// maximum nesting level of IF blocks
+//#define MAX_MACRO   16        // maximum nesting level of MACRO invocations
+#define maxOpcdLen  11          // max opcode length (for building opcode table)
 
-typedef unsigned char Str255[256];	// generic string type
-typedef char bool;				// i guess bool is a c++ thing
+// these should already be defined for POSIX compatibility
+//typedef	unsigned char	u_char;
+//typedef	unsigned short	u_short;
+//typedef	unsigned int	u_int;
+//typedef	unsigned long	u_long;
+
+// a few useful typedefs
+typedef unsigned char  bool;    // i guess bool is a c++ thing
 const bool FALSE = 0;
-const bool TRUE = 1;
+const bool TRUE  = 1;
+typedef char Str255[256];       // generic string type
+
+// --------------------------------------------------------------
+
+// forward-declaration of CPU-specific assembler routines
+
+int DoCPUOpcode(int typ, int parm);
+int DoCPULabelOp(int typ, int parm, char *labl);
+void usage(void);
+void PassInit(void);
+void AsmInit(void);
+
+// other stuff needed by the CPU-specific code:
+//      #define versionName "assembler name"
+//      #define INSTR_MAX   n		// length of longest valid CPU instruction, usually 3 - 6
+//      #define CPU_LITTLE_ENDIAN or #define CPU_BIG_ENDIAN
+//      enums for CPU-specific opcodes (starting with 0)
+//      enums for CPU-specific opcodes (start with o_LabelOp)
+//      struct OpcdRec opcdTab[] = { {"OPCD",  o_OpcdType, 0x00}, ... {"", o_Illegal, 0} };
+
+// --------------------------------------------------------------
 
 const char		*progname;		// pointer to argv[0]
 
 struct SymRec
 {
 	struct SymRec	*next;		// pointer to next symtab entry
-	unsigned short	value;		// symbol value
+	u_short          value;		// symbol value
 	bool			defined;	// TRUE if defined
 	bool			multiDef;	// TRUE if multiply defined
 	bool			isSet;		// TRUE if defined with SET pseudo
@@ -66,8 +99,8 @@ struct SegRec
 {
 	struct SegRec		*next;		// pointer to next segment
 //	bool				gen;		// FALSE to supress code output (not currently implemented)
-	unsigned short		loc;		// locptr for this segment
-	unsigned short		cod;		// codptr for this segment
+	u_short              loc;		// locptr for this segment
+	u_short              cod;		// codptr for this segment
 	char				name[1];	// segment name, storage = 1 + length
 } *segTab = NULL;				// pointer to first entry in macro table
 typedef struct SegRec *SegPtr;
@@ -77,48 +110,50 @@ struct OpcdRec
 {
 	OpcdStr			name;		// opcode name
 	short			typ;		// opcode type
-	unsigned short	parm;		// opcode parameter
+	u_short          parm;		// opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 
 MacroPtr		macPtr;				// current macro in use
 MacroLinePtr	macLine;			// current macro text pointer
-char			*macParms[maxMacParms];	// pointers to current macro parameters
+char			*macParms[MAXMACPARMS];	// pointers to current macro parameters
 Str255			macParmsLine;		// text of current macro parameters
 int				macroCondLevel;		// current IF nesting level inside a macro definition
 
 SegPtr			curSeg;				// current segment
 SegPtr			nullSeg;			// default null segment
 
-unsigned short  locPtr;				// Current program address
-unsigned short	codPtr;				// Current program "real" address
+u_short          locPtr;				// Current program address
+u_short          codPtr;				// Current program "real" address
 int				pass;				// Current assembler pass
 bool			warnFlag;			// TRUE if warning occurred this line
 bool			errFlag;			// TRUE if error occurred this line
 int				errCount;			// Total number of errors
 
 Str255			line;				// Current line from input file
-unsigned char	*linePtr;			// pointer into current line
+char           *linePtr;			// pointer into current line
 Str255			listLine;			// Current listing line
 bool			listLineFF;			// TRUE if an FF was in the current listing line
 bool			listFlag;			// FALSE to suppress listing source
 bool			listThisLine;		// TRUE to force listing this line
 bool			sourceEnd;			// TRUE when END pseudo encountered
-Str255			lastLabl;			// last label for @ temps
+Str255			lastLabl;			// last label for '@' temp labels
+Str255			subrLabl;			// current SUBROUTINE label for '.' temp labels
 bool			listMacFlag;		// FALSE to suppress showing macro expansions
 bool			macLineFlag;		// TRUE if line came from a macro
 int				linenum;			// line number in main source file
+bool            expandHexFlag;      // TRUE to expand long hex data to multiple listing lines
 
 int				condLevel;			// current IF nesting level
 int				condFail;			// highest non-failed IF nesting level
 char			condElse[MAX_COND]; // TRUE if IF encountered on each nesting level
 
-unsigned char   instr[INSTR_MAX];   // Current instruction word
+u_char           instr[INSTR_MAX];   // Current instruction word
 int				instrLen;			// Current instruction length (negative to use bytStr)
 
-unsigned char   bytStr[MAX_BYTSTR]; // Buffer for long DB statements
+u_char           bytStr[MAX_BYTSTR]; // Buffer for long DB statements
 bool			showAddr;			// TRUE to show LocPtr on listing
-unsigned short  xferAddr;			// Transfer address from END pseudo
+u_short          xferAddr;			// Transfer address from END pseudo
 bool			xferFound;			// TRUE if xfer addr defined w/ END
 
 //	Command line parameters
@@ -140,15 +175,143 @@ Str255			incname[MAX_INCLUDE];		// include file names
 int				incline[MAX_INCLUDE];		// include line number
 int				nInclude;			// current include file index
 
+//MacroPtr		macStack[MAX_MACRO];	// stack of currently active macros
+//MacroPtr		macLineStack[MAX_MACRO];	// stack of currently active macros
+//int           macLevel;				// current macro nesting level
+
 bool			evalKnown;			// TRUE if all operands in Eval were "known"
 
+enum
+{
+//  0x00-0xFF = CPU-specific opcodes
 
-void DoOpcode(int typ, int parm);
-void DoLabelOp(int typ, int parm, char *labl);
-void usage(void);
-void PassInit(void);
-void AsmInit(void);
+	o_Illegal = 0x100,	// opcode not found in FindOpcode
 
+	o_DB,		// DB pseudo-op
+	o_DWLE,		// DW pseudo-op
+	o_DWBE,		// big-endian DW
+	o_DS,		// DS pseudo-op
+	o_HEX,		// HEX pseudo-op
+	o_FCC,		// FCC pseudo-op
+	o_ALIGN,	// ALIGN pseudo-op
+
+	o_END,		// END pseudo-op
+	o_Include,  // INCLUDE pseudo-op
+
+	o_ENDM,		// ENDM pseudo-op
+#ifdef ENABLE_REP
+	o_REPEND,   // REPEND pseudo-op
+#endif
+	o_MacName,	// Macro name
+
+    o_LabelOp = 0x1000,   // flag to handle opcode in DoLabelOp
+
+//  0x1000-0x10FF = CPU-specific label-ops
+
+    // the following pseudo-ops handle the label field specially
+	o_EQU = o_LabelOp + 0x100,		// EQU and SET pseudo-ops
+	o_ORG,		// ORG pseudo-op
+	o_RORG,		// RORG pseudo-op
+	o_REND,		// REND pseudo-op
+	o_LIST,		// LIST pseudo-op
+	o_OPT,		// OPT pseudo-op
+	o_ERROR,	// ERROR pseudo-op
+	o_MACRO,	// MACRO pseudo-op
+#ifdef ENABLE_REP
+	o_REPEAT,   // REPEAT pseudo-op
+#endif
+
+	o_SEG,		// SEG pseudo-op
+	o_SUB,		// SUBROUTINE pseudo-op
+
+	o_IF,		// IF <expr> pseudo-op
+	o_ELSE,		// ELSE pseudo-op
+	o_ELSIF,	// ELSIF <expr> pseudo-op
+	o_ENDIF		// ENDIF pseudo-op
+};
+
+struct OpcdRec opcdTab2[] =
+{
+	{"DB",      o_DB,  0},
+	{"FCB",     o_DB,  0},
+	{"BYTE",    o_DB,  0},
+	{"DC.B",    o_DB,  0},
+	{"DFB",     o_DB,  0},
+
+#ifdef CPU_LITTLE_ENDIAN
+//#error is little endian
+	{"DW",      o_DWLE,0},
+	{"FDB",     o_DWLE,0},
+	{"WORD",    o_DWLE,0},
+	{"DC.W",    o_DWLE,0},
+	{"DFW",     o_DWLE,0},
+	{"DA",      o_DWLE,0},
+	{"DRW",     o_DWBE,0},
+#else
+#ifdef CPU_BIG_ENDIAN
+//#error is big endian
+	{"DW",      o_DWBE,0},
+	{"FDB",     o_DWBE,0},
+	{"WORD",    o_DWBE,0},
+	{"DC.W",    o_DWBE,0},
+	{"DFW",     o_DWBE,0},
+	{"DA",      o_DWBE,0},
+	{"DRW",     o_DWLE,0},
+#else
+#error Must define either BIG_ENDIAN or LITTLE_ENDIAN!
+#endif
+#endif
+
+	{"DS",      o_DS,  1},
+	{"DS.B",    o_DS,  1},
+	{"RMB",     o_DS,  1},
+	{"BLKB",    o_DS,  1},
+	{"DS.W",    o_DS,  2},
+	{"BLKW",    o_DS,  2},
+	{"HEX",     o_HEX, 0},
+	{"FCC",     o_FCC, 0},
+	{"END",     o_END, 0},
+	{"ENDM",    o_ENDM,0},
+	{"ALIGN",   o_ALIGN,  0},
+#ifdef ENABLE_REP
+	{"REPEND",  o_REPEND, 0},
+#endif
+	{"INCLUDE", o_Include,0},
+
+	{"=",         o_EQU,   0},
+	{"EQU",       o_EQU,   0},
+	{"SET",       o_EQU,   1},
+	{"DEFL",      o_EQU,   1},
+	{"ORG",       o_ORG,   0},
+	{"AORG",      o_ORG,   0},
+	{"RORG",      o_RORG,  0},
+	{"REND",      o_REND,  0},
+	{"LIST",      o_LIST,  0},
+	{"OPT",       o_OPT,   0},
+	{"ERROR",     o_ERROR, 0},
+#ifdef ENABLE_REP
+	{"REPEAT",    o_REPEAT,0},
+#endif
+	{"MACRO",     o_MACRO, 0},
+	{"SEG",       o_SEG,   1},
+	{"RSEG",      o_SEG,   1},
+	{"SEG.U",     o_SEG,   0},
+	{"SUB",       o_SUB,   0},
+	{"SUBROUTINE",o_SUB,   0},
+	{"IF",        o_IF,    0},
+	{"ELSE",      o_ELSE,  0},
+	{"ELSIF",     o_ELSIF, 0},
+	{"ENDIF",     o_ENDIF, 0},
+
+	{"",     o_Illegal, 0}
+};
+
+
+// --------------------------------------------------------------
+
+#ifdef ENABLE_REP
+void DoLine(void);			// forward declaration
+#endif
 
 // --------------------------------------------------------------
 // error messages
@@ -226,7 +389,8 @@ void Debleft(char *s)
 	while (*p == 9 || *p == ' ')
 		p++;
 
-	while (*s++ = *p++);
+    if (p != s)
+        while (*s++ = *p++);
 }
 
 
@@ -281,11 +445,11 @@ int isalphanum(char c)
 }
 
 
-unsigned int EvalBin(char *binStr)
+u_int EvalBin(char *binStr)
 {
-	unsigned int	binVal;
-	int				evalErr;
-	int				c;
+	u_int	binVal;
+	int		evalErr;
+	int		c;
 
 	evalErr = FALSE;
 	binVal  = 0;
@@ -308,11 +472,11 @@ unsigned int EvalBin(char *binStr)
 }
 
 
-unsigned int EvalOct(char *octStr)
+u_int EvalOct(char *octStr)
 {
-	unsigned int	octVal;
-	int				evalErr;
-	int				c;
+	u_int	octVal;
+	int		evalErr;
+	int		c;
 
 	evalErr = FALSE;
 	octVal  = 0;
@@ -335,11 +499,11 @@ unsigned int EvalOct(char *octStr)
 }
 
 
-unsigned int EvalDec(char *decStr)
+u_int EvalDec(char *decStr)
 {
-	unsigned int	decVal;
-	int				evalErr;
-	int				c;
+	u_int	decVal;
+	int		evalErr;
+	int		c;
 
 	evalErr = FALSE;
 	decVal  = 0;
@@ -371,11 +535,11 @@ int Hex2Dec(c)
 }
 
 
-unsigned int EvalHex(char *hexStr)
+u_int EvalHex(char *hexStr)
 {
-	unsigned int	hexVal;
-	int				evalErr;
-	int				c;
+	u_int	hexVal;
+	int		evalErr;
+	int		c;
 
 	evalErr = FALSE;
 	hexVal  = 0;
@@ -398,7 +562,7 @@ unsigned int EvalHex(char *hexStr)
 }
 
 
-unsigned int EvalNum(char *word)
+u_int EvalNum(char *word)
 {
 	int val;
 
@@ -451,7 +615,7 @@ unsigned int EvalNum(char *word)
 // converts the word to uppercase, too
 int GetWord(char *word)
 {
-	unsigned char	c;
+	u_char	c;
 
 	word[0] = 0;
 
@@ -495,7 +659,7 @@ int GetWord(char *word)
 // same as GetWord, except it allows '.' chars in alphanumerics
 int GetOpcode(char *word)
 {
-	unsigned char	c;
+	u_char	c;
 
 	word[0] = 0;
 
@@ -578,6 +742,17 @@ void IllegalOperand()
 }
 
 
+/*
+ *	MissingOperand
+ */
+
+void MissingOperand()
+{
+	Error("Missing operand");
+	EatIt();
+}
+
+
 // --------------------------------------------------------------
 // macro handling
 
@@ -598,21 +773,34 @@ MacroPtr FindMacro(char *name)
 }
 
 
-MacroPtr AddMacro(char *name)
+MacroPtr NewMacro(char *name)
 {
 	MacroPtr	p;
 
 	p = malloc(sizeof(struct MacroRec) + strlen(name));
 
-	strcpy(p -> name, name);
-	p -> def = FALSE;
-	p -> toomany = FALSE;
-	p -> text = NULL;
-	p -> next = macroTab;
-	p -> parms = NULL;
-	p -> nparms = 0;
+	if (p)
+	{
+		strcpy(p -> name, name);
+		p -> def = FALSE;
+		p -> toomany = FALSE;
+		p -> text = NULL;
+		p -> next = macroTab;
+		p -> parms = NULL;
+		p -> nparms = 0;
+	}
 
-	macroTab = p;
+	return p;
+}
+	
+
+MacroPtr AddMacro(char *name)
+{
+	MacroPtr	p;
+
+	p = NewMacro(name);
+	if (p)
+		macroTab = p;
 
 	return p;
 }
@@ -645,17 +833,20 @@ void AddMacroLine(MacroPtr macro, char *line)
 	MacroLinePtr	p;
 
 	m = malloc(sizeof(struct MacroLine) + strlen(line));
-	m -> next = NULL;
-	strcpy(m -> text, line);
-
-	p = macro -> text;
-	if (p)
+	if (m)
 	{
-		while (p -> next)
-			p = p -> next;
-		p -> next = m;
+		m -> next = NULL;
+		strcpy(m -> text, line);
+
+		p = macro -> text;
+		if (p)
+		{
+			while (p -> next)
+				p = p -> next;
+			p -> next = m;
+		}
+		else macro -> text = m;
 	}
-	else macro -> text = m;
 }
 
 
@@ -668,7 +859,7 @@ void GetMacParms(MacroPtr macro)
 	char	*p;
 	bool	done;
 
-	for (i=0; i<maxMacParms; i++)
+	for (i=0; i<MAXMACPARMS; i++)
 		macParms[i] = NULL;
 
 	// skip initial whitespace
@@ -681,7 +872,7 @@ void GetMacParms(MacroPtr macro)
 
 	n = 0;
 	p = macParmsLine;
-	while (*p && *p != ';' && n<maxMacParms)
+	while (*p && *p != ';' && n<MAXMACPARMS)
 	{
 		// skip whitespace before current parameter
 		c = *p;
@@ -733,11 +924,11 @@ void GetMacParms(MacroPtr macro)
 
 	// terminate last parameter and point remaining parameters to null strings
 	*p = 0;
-	for (i=n; i<maxMacParms; i++)
+	for (i=n; i<MAXMACPARMS; i++)
 		macParms[i] = p;
 
 	// remove whitespace from end of parameter
-	for (i=0; i<maxMacParms; i++)
+	for (i=0; i<MAXMACPARMS; i++)
 		if (macParms[i])
 		{
 			p = macParms[i] + strlen(macParms[i]) - 1;
@@ -745,7 +936,7 @@ void GetMacParms(MacroPtr macro)
 				*p-- = 0;
 		}
 
-	if (n > macro -> nparms || n > maxMacParms)
+	if (n > macro -> nparms || n > MAXMACPARMS)
 		Error("Too many macro parameters");
 }
 
@@ -797,6 +988,22 @@ void DoMacParms()
 				// update linePtr
 				linePtr = p;
 			}
+		}
+		// handle '##' concatenation operator
+		else if (token == '#' && *linePtr == '#')
+		{
+			p = linePtr + 1;	// skip second '#'
+			linePtr--;			// skip first '#'
+			// skip whitespace to the left
+			while (linePtr > line && linePtr[-1] == ' ')
+				linePtr--;
+			// skip whitespace to the right
+			while (*p == ' ') p++;
+			// copy right side of chopped zone
+			strcpy(word, p);
+			// paste it at new linePtr
+			strcpy(linePtr, word);
+			// and linePtr now even points to where it should
 		}
 
 		// skip initial whitespace
@@ -854,33 +1061,52 @@ void DumpMacroTab(void)
 
 
 /*
- *	FindOpcode
+ *	FindOpcodeTab - finds an entry in an opcode table
  */
 
-void FindOpcode(char *name, int *typ, int *parm, MacroPtr *macro)
+bool FindOpcodeTab(OpcdPtr p, char *name, int *typ, int *parm)
 
 {
-extern OpcdPtr opcdTab;
-	OpcdPtr p = (OpcdPtr) &opcdTab;
 	bool found = FALSE;
 
-	while (p -> typ != o_Illegal && !found)
+//	while (p -> typ != o_Illegal && !found)
+	while (*(p -> name) && !found)
 	{
 		found = (strcmp(p -> name, name) == 0);
 		if (!found)
 			p++;
+        else
+        {
+            *typ  = p -> typ;
+            *parm = p -> parm;
+        }
 	}
 
-	*typ  = p -> typ;
-	*parm = p -> parm;
+    return found;
+}
 
-	*macro = NULL;
-	if (!found)
-	{
-		*macro = FindMacro(name);
-		if (*macro)
-			*typ = o_MacName;
-	}
+
+/*
+ *	FindOpcode - finds an opcode in either the generic or CPU-specific
+ *               opcode tables, or as a macro name
+ */
+
+void FindOpcode(char *name, int *typ, int *parm, MacroPtr *macro)
+{
+//    extern OpcdPtr opcdTab;
+    extern struct OpcdRec opcdTab[];
+
+    *typ   = o_Illegal;
+    *parm  = 0;
+    *macro = NULL;
+
+    if (FindOpcodeTab((OpcdPtr) &opcdTab,  name, typ, parm)) return;
+    if (name[0] == '.') name++; // allow pseudo-ops to be invoked as ".OP"
+    if (FindOpcodeTab((OpcdPtr) &opcdTab2, name, typ, parm)) return;
+
+	*macro = FindMacro(name);
+	if (*macro)
+		*typ = o_MacName;
 }
 
 
@@ -991,7 +1217,7 @@ int RefSym(char *symName, bool *known)
  *	DefSym
  */
 
-void DefSym(char *symName, unsigned short val, bool setSym, bool equSym)
+void DefSym(char *symName, u_short val, bool setSym, bool equSym)
 {
 	SymPtr p;
 	Str255 s;
@@ -1023,21 +1249,34 @@ void DefSym(char *symName, unsigned short val, bool setSym, bool equSym)
 }
 
 
-void DumpSym(SymPtr p, char *s)
+void DumpSym(SymPtr p, char *s, int *w)
 {
+//
+// #######
+//
 	char *s2;
-	int n;
+	int n,len,max;
 
 	n = 0;
+    *w = 1;
+    max = MAXSYMLEN;
 
 	s2 = p->name;
-	while(*s2 && n<maxSymLen)
+    len = strlen(s2);
+
+    while (max-1 < len)
+    {
+        *w = *w + 1;
+        max = max + MAXSYMLEN + 8; // 8 = number of extra chars between symbol names
+    }
+
+	while(*s2 && n < max)
 	{
 		*s++ = *s2++;
 		n++;
 	}
 
-	while (n < maxSymLen)
+	while (n < max)
 	{
 		*s++ = ' ';
 		n++;
@@ -1052,7 +1291,7 @@ void DumpSym(SymPtr p, char *s)
 	if ( p->multiDef)	{*s++ = 'M'; n++;}	// Multiply defined
 	if ( p->isSet)		{*s++ = 'S'; n++;}	// Set
 	if ( p->equ)		{*s++ = 'E'; n++;}	// Equ
-	while (n < 9)
+	while (n < 3)
 	{
 		*s++ = ' ';
 		n++;
@@ -1064,28 +1303,37 @@ void DumpSym(SymPtr p, char *s)
 void DumpSymTab(void)
 {
 	struct	SymRec *p;
-	int		i;
+	int		i,w;
 	Str255	s;
 
-	i = 1;
+	i = 0;
 	p = symTab;
 	while (p)
 	{
-		DumpSym(p,s);
+		DumpSym(p,s,&w);
 		p = p -> next;
 
-		i++;
-		if (p == NULL || i > symTabCols)
+        // force a newline if new symbol won't fit on current line
+        if (i+w > symTabCols)
+        {
+			if (cl_List)
+				fprintf(listing, "\n");
+            i = 0;
+        }
+        // if last symbol or if symbol fills line, deblank and print it
+		if (p == NULL || i+w >= symTabCols)
 		{
-			i = 1;
 			Debright(s);
 			if (cl_List)
 				fprintf(listing, "%s\n", s);
+			i = 0;
 		}
+        // otherwise just print it and count its width
 		else
 		{
 			if (cl_List)
 				fprintf(listing, "%s", s);
+            i = i + w;
 		}
 	}
 }
@@ -1096,6 +1344,8 @@ void SortSymTab()
 	SymPtr			i,j;	// pointers to current elements
 	SymPtr			ip,jp;	// pointers to previous elements
 	SymPtr			t;		// temp for swapping
+
+    // yes, it's a linked-list bubble sort
 
 	if (symTab != NULL)
 	{
@@ -1155,7 +1405,7 @@ int Factor(void)
 	switch(token)
 	{
 		case 0:
-			Error("Missing operand");
+			MissingOperand();
 			break;
 
 		case '%':
@@ -1163,7 +1413,7 @@ int Factor(void)
 			val = EvalBin(word);
 			break;
 
-		case '$':   // 6502/6809 only?
+		case '$':
 			if (ishex(*linePtr))
 			{
 				GetWord(word);
@@ -1221,7 +1471,7 @@ int Factor(void)
 				else
 					Error("Missing close quote");
 			}
-			else Error("Missing operand");
+			else MissingOperand();
            	break;
 
 		case '.':
@@ -1276,7 +1526,8 @@ int Factor(void)
 			// fall-through...
 		case '@':
 			GetWord(word);
-			strcpy(s,lastLabl);
+			if (token == '.' && subrLabl[0])	strcpy(s,subrLabl);
+										else	strcpy(s,lastLabl);
 			s[strlen(s)+1] = 0;
 			s[strlen(s)]   = token;
 			strcat(s,word);
@@ -1461,14 +1712,19 @@ int Eval(void)
 }
 
 
+void CheckByte(int val)
+{
+	if (!errFlag && (val < -128 || val > 255))
+		Warning("Byte out of range");
+}
+
+
 int EvalByte(void)
 {
 	short val;
 
 	val = Eval();
-
-	if (!errFlag && (val < -128 || val > 255))
-		Warning("Byte out of range");
+    CheckByte(val);
 
 	return val & 0xFF;
 }
@@ -1481,9 +1737,19 @@ int EvalBranch(int instrLen)
 	val = Eval();
 	val = val - locPtr - instrLen;
 	if (!errFlag && (val < -128 || val > 127))
-		Error("Branch out of range");
+		Warning("Short branch out of range");
 
 	return val & 0xFF;
+}
+
+
+int EvalLBranch(int instrLen)
+{
+	short val;
+
+	val = Eval();
+	val = val - locPtr - instrLen;
+	return val;
 }
 
 
@@ -1491,7 +1757,7 @@ int EvalBranch(int instrLen)
 // object file generation
 
 
-	unsigned char ihex_buf[IHEX_SIZE];
+	u_char ihex_buf[IHEX_SIZE];
 	int ihex_len;	// length of current intel hex line
 	int ihex_base;	// current address in intel hex buffer
 	int ihex_addr;	// start address of current intel hex line
@@ -1518,7 +1784,7 @@ int EvalBranch(int instrLen)
 //                        and subtract from 256 (2's complement negate)
 
 
-void write_ihex(int addr, unsigned char *buf, int len, int rectype)
+void write_ihex(int addr, u_char *buf, int len, int rectype)
 {
 	int i,chksum;
 
@@ -1557,7 +1823,7 @@ void write_ihex(int addr, unsigned char *buf, int len, int rectype)
 // ee    = checksum byte: add all bytes bb through dd
 //                        and subtract from 255 (1's complement)
 
-void write_srec(int addr, unsigned char *buf, int len, int rectype)
+void write_srec(int addr, u_char *buf, int len, int rectype)
 {
 	int i,chksum;
 
@@ -1578,7 +1844,7 @@ void write_srec(int addr, unsigned char *buf, int len, int rectype)
 
 
 // rectype 0 = code, rectype 1 = xfer
-void write_hex(int addr, unsigned char *buf, int len, int rectype)
+void write_hex(int addr, u_char *buf, int len, int rectype)
 {
 	if (cl_S9)  write_srec(addr, buf, len, rectype);
 		else	write_ihex(addr, buf, len, rectype);
@@ -1666,14 +1932,14 @@ void AddLocPtr(int ofs)
 }
 
 
-void Instr1(unsigned char b)
+void Instr1(u_char b1)
 {
-	instr[0] = b;
+	instr[0] = b1;
 	instrLen = 1;
 }
 
 
-void Instr2(unsigned char b1, unsigned char b2)
+void Instr2(u_char b1, u_char b2)
 {
 	instr[0] = b1;
 	instr[1] = b2;
@@ -1681,7 +1947,7 @@ void Instr2(unsigned char b1, unsigned char b2)
 }
 
 
-void Instr3(unsigned char b1, unsigned char b2, unsigned char b3)
+void Instr3(u_char b1, u_char b2, u_char b3)
 {
 	instr[0] = b1;
 	instr[1] = b2;
@@ -1690,19 +1956,7 @@ void Instr3(unsigned char b1, unsigned char b2, unsigned char b3)
 }
 
 
-void Instr3W(unsigned char b, int w)
-{
-	Instr3(b,w & 255,w >> 8);
-}
-
-
-void Instr3BW(unsigned char b, int w)
-{
-	Instr3(b,w >> 8,w & 255);
-}
-
-
-void Instr4(int b1, int b2, int b3, int b4)
+void Instr4(u_char b1, u_char b2, u_char b3, u_char b4)
 {
 	instr[0] = b1;
 	instr[1] = b2;
@@ -1712,19 +1966,7 @@ void Instr4(int b1, int b2, int b3, int b4)
 }
 
 
-void Instr4W(int b1, int b2, int w)
-{
-	Instr4(b1,b2,w & 255,w >> 8);
-}
-
-
-void Instr4BW(int b1, int b2, int w)
-{
-	Instr4(b1,b2,w >> 8,w & 255);
-}
-
-
-void Instr5(int b1, int b2, int b3, int b4, int b5)
+void Instr5(u_char b1, u_char b2, u_char b3, u_char b4, u_char b5)
 {
 	instr[0] = b1;
 	instr[1] = b2;
@@ -1735,10 +1977,41 @@ void Instr5(int b1, int b2, int b3, int b4, int b5)
 }
 
 
-void Instr5BW(int b1, int b2, int b3, int w)
+#ifdef CPU_BIG_ENDIAN
+
+void Instr3W(u_char b1, int w)
+{
+	Instr3(b1,w >> 8,w & 255);
+}
+
+void Instr4W(u_char b1, u_char b2, int w)
+{
+	Instr4(b1,b2,w >> 8,w & 255);
+}
+
+void Instr5W(u_char b1, u_char b2, u_char b3, int w)
 {
 	Instr5(b1,b2,b3,w >> 8,w & 255);
 }
+
+#else
+
+void Instr3W(u_char b1, int w)
+{
+	Instr3(b1,w & 255,w >> 8);
+}
+
+void Instr4W(u_char b1, u_char b2, int w)
+{
+	Instr4(b1,b2,w & 255,w >> 8);
+}
+
+void Instr5W(u_char b1, u_char b2, u_char b3, int w)
+{
+	Instr5(b1,b2,b3,w & 255,w >> 8);
+}
+
+#endif
 
 
 // --------------------------------------------------------------
@@ -1826,7 +2099,7 @@ void CloseInclude(void)
 
 int ReadLine(FILE *file, char *line, int max)
 {
-	int c;
+	int c = 0;
 	int len = 0;
 
 	macLineFlag = (macLine != NULL);
@@ -1899,7 +2172,7 @@ void ListOut(void)
 	if (cl_List)
 		fprintf(listing,"%s\n",listLine);
 
-	if ((errFlag && cl_Err) || warnFlag)
+	if ((errFlag && cl_Err) || (warnFlag && cl_Warn))
 		fprintf(stderr,"%s\n",listLine);
 }
 
@@ -1936,15 +2209,17 @@ void CopyListLine(void)
 // main assembler loops
 
 
-void DoStdOpcode(int typ, int parm)
+void DoOpcode(int typ, int parm)
 {
 	int				val;
 	int				i,n;
 	Str255			word,s;
 	char			*oldLine;
 	int				token;
-	unsigned char	ch;
-	unsigned char	quote;
+	u_char           ch;
+	u_char           quote;
+
+    if (DoCPUOpcode(typ, parm)) return;
 
 	switch(typ)
 	{
@@ -1954,7 +2229,7 @@ void DoStdOpcode(int typ, int parm)
 			token = GetWord(word);
 
 			if (token == 0)
-               Error("Missing operand");
+               MissingOperand();
 
 			while (token)
 			{
@@ -2007,7 +2282,7 @@ void DoStdOpcode(int typ, int parm)
 				{
 					token = GetWord(word);
 					if (token == 0)
-						Error("Missing operand");
+						MissingOperand();
              	}
 				else if (token)
 				{
@@ -2034,9 +2309,9 @@ void DoStdOpcode(int typ, int parm)
             token = GetWord(word);
 
 			if (token == 0)
-               Error("Missing operand");
+               MissingOperand();
 
-           	while (token && !errFlag)
+           	while (token)
 			{
 				linePtr = oldLine;
 				val = Eval();
@@ -2062,7 +2337,7 @@ void DoStdOpcode(int typ, int parm)
 				{
 					token = GetWord(word);
 					if (token == 0)
-						Error("Missing operand");
+						MissingOperand();
                	}
 				else if (token)
 				{
@@ -2105,7 +2380,7 @@ void DoStdOpcode(int typ, int parm)
 				else
 					for (i=0; i<val*parm; i+=parm)
 					{
-#ifdef BIG_ENDIAN
+#ifdef CPU_BIG_ENDIAN
 						bytStr[i]   = n >> 8;
 						bytStr[i+1] = n & 0xFF;
 #else
@@ -2171,7 +2446,7 @@ void DoStdOpcode(int typ, int parm)
             token = GetWord(word);
 
 			if (token == 0)
-               Error("Missing operand");
+               MissingOperand();
 			else if (token == -1)
 			{
 				linePtr = oldLine;
@@ -2227,7 +2502,7 @@ void DoStdOpcode(int typ, int parm)
 					{
 						token = GetWord(word);
 						if (token == 0)
-							Error("Missing operand");
+							MissingOperand();
 					}
 					else if (token)
 					{
@@ -2341,6 +2616,12 @@ void DoStdOpcode(int typ, int parm)
 			Error("ENDM without MACRO");
 			break;
 
+#ifdef ENABLE_REP
+		case o_REPEND:
+			Error("REPEND without REPEAT");
+			break;
+#endif
+
 		default:
 			Error("Unknown opcode");
 			break;
@@ -2348,7 +2629,7 @@ void DoStdOpcode(int typ, int parm)
 }
 
 
-void DoStdLabelOp(int typ, int parm, char *labl)
+void DoLabelOp(int typ, int parm, char *labl)
 {
 	int			val;
 	int			i;
@@ -2360,6 +2641,10 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 	int			nparms;
 	SegPtr		seg;
 	char		*oldLine;
+//	struct MacroRec repList;		// repeat text list
+//	MacroLinePtr	rep,rep2;		// pointer into repeat text list
+
+    if (DoCPULabelOp(typ,parm,labl)) return;
 
 	switch(typ)
 	{
@@ -2412,6 +2697,11 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 			}
 			break;
 
+		case o_SUB:
+			token = GetWord(word);  // get subroutine name
+			strcpy(subrLabl,word);
+			break;
+
 		case o_REND:
             if (pass == 2)
 			{
@@ -2427,7 +2717,7 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 			break;
 
 		case o_LIST:
-			listThisLine = TRUE;
+			listThisLine = TRUE;	// always list this line
 
 			if (labl[0])
 				Error("Label not allowed");
@@ -2438,12 +2728,14 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 			else if (strcmp(word,"OFF") == 0)		listFlag = FALSE;
 			else if (strcmp(word,"MACRO") == 0)		listMacFlag = TRUE;
 			else if (strcmp(word,"NOMACRO") == 0)	listMacFlag = FALSE;
+            else if (strcmp(word,"EXPAND") == 0)    expandHexFlag = TRUE;
+            else if (strcmp(word,"NOEXPAND") == 0)  expandHexFlag = FALSE;
 			else									IllegalOperand();
 
 			break;
 /*
 		case o_PAGE:
-			listThisLine = TRUE;
+			listThisLine = TRUE;	// always list this line
 
 			if (labl[0])
 				Error("Label not allowed");
@@ -2452,7 +2744,7 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 			break;
 */
 		case o_OPT:
-			listThisLine = TRUE;
+			listThisLine = TRUE;	// always list this line
 
 			if (labl[0])
 				Error("Label not allowed");
@@ -2463,6 +2755,8 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 			else if (strcmp(word,"NOLIST") == 0)	listFlag = FALSE;
 			else if (strcmp(word,"MACRO") == 0)		listMacFlag = TRUE;
 			else if (strcmp(word,"NOMACRO") == 0)	listMacFlag = FALSE;
+            else if (strcmp(word,"EXPAND") == 0)    expandHexFlag = TRUE;
+            else if (strcmp(word,"NOEXPAND") == 0)  expandHexFlag = FALSE;
 			else									Error("Illegal option");
 
 			break;
@@ -2512,7 +2806,7 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 					while (token == -1)
 					{
 						nparms++;
-						if (nparms > maxMacParms)
+						if (nparms > MAXMACPARMS)
 						{
 							Error("Too many macro parameters");
 							macro -> toomany = TRUE;
@@ -2539,7 +2833,7 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 				i = ReadSourceLine(line, sizeof(line));
 				while (i && typ != o_ENDM)
 				{
-					if (pass == 2)
+					if (pass == 2 && (listFlag || errFlag))
 						ListOut();
 					CopyListLine();
 
@@ -2563,7 +2857,8 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 							if (token == '@' || token == '.')
 							{
 								GetWord(word);
-								strcpy(labl,lastLabl);
+								if (token == '.' && subrLabl[0])	strcpy(labl,subrLabl);
+															else	strcpy(labl,lastLabl);
 								labl[strlen(labl)+1] = 0;
 								labl[strlen(labl)]   = token;
 								strcat(labl,word);			// labl = lastLabl + "@" + word;
@@ -2611,7 +2906,8 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 								AddMacroLine(macro,line);
 							break;
 					}
-					i = ReadSourceLine(line, sizeof(line));
+					if (typ != o_ENDM)
+						i = ReadSourceLine(line, sizeof(line));
              	}
 
 				if (macroCondLevel)
@@ -2686,6 +2982,132 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 			}
 			break;
 
+#ifdef ENABLE_REP
+// still under construction
+		case o_REPEAT:
+			if (labl[0])
+			{
+				DefSym(labl,locPtr,FALSE,FALSE);
+				showAddr = TRUE;
+			}
+
+			// get repeat count
+			val = Eval();
+			if (!errFlag)
+				if (val < 0) IllegalOperand();
+
+			if (!errFlag)
+			{
+				repList -> text = NULL;
+
+// *** read line
+// *** while line not REPEND
+// ***      add line to repeat buffer
+				macroCondLevel = 0;
+				i = ReadSourceLine(line, sizeof(line));
+				while (i && typ != o_REPEND)
+				{
+					if (pass == 2 && (listFlag || errFlag))
+						ListOut();
+					CopyListLine();
+
+					// skip initial formfeeds
+					linePtr = line;
+					while (*linePtr == 12)
+						linePtr++;
+
+					// get label
+					labl[0] = 0;
+					if (isalphanum(*linePtr) || *linePtr == '@' || *linePtr == '.')
+					{
+						token = GetWord(labl);
+						if (token)
+							showAddr = TRUE;
+							while (*linePtr == ' ' || *linePtr == '\t')
+								linePtr++;
+
+						if (labl[0])
+						{
+							if (token == '@' || token == '.')
+							{
+								GetWord(word);
+								if (token == '.' && subrLabl[0])	strcpy(labl,subrLabl);
+															else	strcpy(labl,lastLabl);
+								labl[strlen(labl)+1] = 0;
+								labl[strlen(labl)]   = token;
+								strcat(labl,word);			// labl = lastLabl + "@" + word;
+							}
+							else
+								strcpy(lastLabl,labl);
+						}
+
+						if (*linePtr == ':')
+							linePtr++;
+					}
+
+					typ = 0;
+					if (GetOpcode(opcode))
+						FindOpcode(opcode, &typ, &parm, &xmacro);
+
+					switch(typ)
+					{
+						case o_IF:
+							if (pass == 1)
+								AddMacroLine(&replist,line);
+							macroCondLevel++;
+							break;
+
+						case o_ENDIF:
+							if (pass == 1)
+								AddMacroLine(&replist,line);
+							if (macroCondLevel)
+								macroCondLevel--;
+							else
+								Error("ENDIF without IF in REPEAT block");
+							break;
+
+						case o_END:
+							Error("END not allowed inside REPEAT block");
+							break;
+
+						case o_ENDM:
+							if (pass == 1 && labl[0])
+								AddMacroLine(&replist,labl);
+							break;
+
+						default:
+							if (pass == 1)
+								AddMacroLine(&replist,line);
+							break;
+					}
+					if (typ != o_ENDM)
+						i = ReadSourceLine(line, sizeof(line));
+             	}
+
+				if (macroCondLevel)
+					Error("IF block without ENDIF in REPEAT block");
+
+				if (typ != o_REPEND)
+					Error("Missing REPEND");
+
+				if (!errFlag)
+				{
+// *** while (val--)
+// ***      for each line
+// ***            doline()
+				}
+
+				// free repeat line buffer
+				while (replist)
+				{
+					rep = replist->next;
+					free(replist);
+					replist = rep;
+				}
+			}
+			break;
+#endif
+
 		default:
 			Error("Unknown opcode");
 			break;
@@ -2693,7 +3115,7 @@ void DoStdLabelOp(int typ, int parm, char *labl)
 }
 
 
-void DoPass()
+void DoLine()
 {
 	Str255		labl;
 	Str255		opcode;
@@ -2703,20 +3125,250 @@ void DoPass()
 	Str255		word;
 	int			token;
 	MacroPtr	macro;
+	char		*oldLine;
+
+	errFlag      = FALSE;
+	warnFlag     = FALSE;
+	instrLen     = 0;
+	showAddr     = FALSE;
+	listThisLine = listFlag;
+	CopyListLine();
+
+	// skip initial formfeeds
+	linePtr = line;
+	while (*linePtr == 12)
+		linePtr++;
+
+	// look for label at beginning of line
+	labl[0] = 0;
+	if (isalphanum(*linePtr) || *linePtr == '@' || *linePtr == '.')
+	{
+		token = GetWord(labl);
+        oldLine = linePtr;
+		if (token)
+			showAddr = TRUE;
+		while (*linePtr == ' ' || *linePtr == '\t')
+			linePtr++;
+
+           if (labl[0])
+		{
+			if (token == '@' || token == '.')
+			{
+				GetWord(word);
+                if (token == '.' && FindOpcodeTab((OpcdPtr) &opcdTab2, word, &typ, &parm))
+                {
+                    linePtr = oldLine;
+                }
+                else
+                {
+				if (token == '.' && subrLabl[0])	strcpy(labl,subrLabl);
+											else	strcpy(labl,lastLabl);
+				labl[strlen(labl)+1] = 0;
+				labl[strlen(labl)]   = token;
+				strcat(labl,word);			// labl = lastLabl + "@" + word;
+                }
+			}
+			else
+				strcpy(lastLabl,labl);
+		}
+
+		if (*linePtr == ':')
+			linePtr++;
+	}
+
+	if (condLevel > condFail)
+	{
+		listThisLine = FALSE;
+
+		// inside failed IF statement
+		if (GetOpcode(opcode))
+		{
+			FindOpcode(opcode, &typ, &parm, &macro);
+
+			switch(typ)
+			{
+				case o_IF:
+					condLevel++;
+					break;
+
+				case o_ELSE:
+					if (condLevel == condFail+1)
+					{	// previous IF was false
+						listThisLine = listFlag;
+
+						if (condLevel < MAX_COND && condElse[condLevel])
+							Error("Multiple ELSE statements in an IF block");
+						else
+						{
+							if (condLevel < MAX_COND)
+								condElse[condLevel] = TRUE;
+
+							condFail++;
+						}
+					}
+					break;
+
+				case o_ELSIF:
+					if (condLevel == condFail+1)
+					{	// previous IF was false
+						listThisLine = listFlag;
+
+						if (condLevel < MAX_COND && condElse[condLevel])
+							Error("Multiple ELSE statements in an IF block");
+						else
+						{
+							i = Eval();
+							if (!errFlag && i != 0)
+								condFail++;
+						}
+					}
+					break;
+
+				case o_ENDIF:
+					condLevel--;
+					if (condLevel == condFail)
+						listThisLine = listFlag;
+					break;
+
+				default:	// ignore any other lines
+					break;
+			}
+		}
+
+		if (pass == 2 && listThisLine && (errFlag || listMacFlag || !macLineFlag))
+			ListOut();
+	}
+	else
+	{
+		token = GetOpcode(opcode);
+		if (token == 0 || token == '*')			// line with label only
+		{
+			DefSym(labl,locPtr,FALSE,FALSE);
+		}
+		else
+		{
+			FindOpcode(opcode, &typ, &parm, &macro);
+
+			if (typ == o_Illegal)
+			{
+				sprintf(word,"Illegal opcode '%s'",opcode);
+				Error(word);
+			}
+			else if (typ == o_MacName)
+			{
+				if (macPtr)
+					Error("Nested macros not supported");
+
+//				if (macPtr && macLevel >= MAX_MACRO)
+//					Error("Macros nested too deeply");
+				else
+				{
+//					if (macPtr)
+//						macStack[macLevel++] = macPtr;
+
+					macPtr  = macro;
+					macLine = macro -> text;
+
+					GetMacParms(macro);
+
+					showAddr = TRUE;
+					DefSym(labl,locPtr,FALSE,FALSE);
+				}
+			}
+			else if (typ > o_LabelOp)
+			{
+				showAddr = FALSE;
+				DoLabelOp(typ,parm,labl);
+			}
+			else
+			{
+				showAddr = TRUE;
+				DefSym(labl,locPtr,FALSE,FALSE);
+				DoOpcode(typ, parm);
+			}
+
+			if (typ != o_Illegal && typ != o_MacName)
+				if (!errFlag && GetWord(word))
+					Error("Too many operands");
+		}
+
+		if (pass == 1)
+			AddLocPtr(abs(instrLen));
+		else
+		{
+			if (showAddr)
+			{
+				sprintf(word,"%.4X",locPtr);	// codPtr
+				for (i=0; i<4; i++)
+					listLine[i] = word[i];
+			}
+
+			if (instrLen>0)
+				for (i = 0; i < instrLen; i++)
+				{
+					sprintf(word,"%.2X",instr[i]);
+					listLine[i*2+5] = word[0];
+					listLine[i*2+6] = word[1];
+					CodeOut(instr[i]);
+			}
+			else if (instrLen<0)
+			{
+				for (i = 0; i < -instrLen; i++)
+				{
+                    if (i<5 || expandHexFlag)
+                    {
+                        if (i > 0 && i % 5 == 0)
+                        {
+                            if (listThisLine)
+                                ListOut();
+                            strcpy(listLine, "                ");		// 16 blanks
+                            sprintf(word,"%.4X",locPtr);
+                            listLine[0] = word[0];
+                            listLine[1] = word[1];
+                            listLine[2] = word[2];
+                            listLine[3] = word[3];
+                        }
+                        sprintf(word,"%.2X",bytStr[i]);
+                        listLine[(i%5)*2+5] = word[0];
+                        listLine[(i%5)*2+6] = word[1];
+                        if (i>=5)
+                            listLine[(i%5)*2+7] = 0;
+                    }
+					CodeOut(bytStr[i]);
+				}
+			}
+
+			if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
+				ListOut();
+		}
+	}
+}
+
+
+void DoPass()
+{
+	Str255		opcode;
+	int			typ;
+	int			parm;
+	int			i;
+	MacroPtr	macro;
 	SegPtr		seg;
 
 	fseek(source, 0, SEEK_SET);	// rewind source file
 	sourceEnd = FALSE;
 	lastLabl[0] = 0;
+	subrLabl[0] = 0;
 
 	fprintf(stderr,"Pass %d\n",pass);
 
-	errCount    = 0;
-	condLevel   = 0;
-	condFail    = 0;
-	listFlag    = TRUE;
-	listMacFlag = FALSE;
-	linenum		= 0;
+	errCount      = 0;
+	condLevel     = 0;
+	condFail      = 0;
+	listFlag      = TRUE;
+	listMacFlag   = FALSE;
+    expandHexFlag = TRUE;
+	linenum       = 0;
+//	macLevel      = 0;
 
 	// reset all code pointers
 	CodeAbsOrg(0);
@@ -2733,211 +3385,7 @@ void DoPass()
 	i = ReadSourceLine(line, sizeof(line));
 	while (i && !sourceEnd)
 	{
-		errFlag      = FALSE;
-		warnFlag     = FALSE;
-		instrLen     = 0;
-		showAddr     = FALSE;
-		listThisLine = listFlag;
-		CopyListLine();
-
-		// skip initial formfeeds
-		linePtr = line;
-		while (*linePtr == 12)
-			linePtr++;
-
-		// look for label at beginning of line
-		labl[0] = 0;
-		if (isalphanum(*linePtr) || *linePtr == '@' || *linePtr == '.')
-		{
-			token = GetWord(labl);
-			if (token)
-				showAddr = TRUE;
-			while (*linePtr == ' ' || *linePtr == '\t')
-				linePtr++;
-
-            if (labl[0])
-			{
-				if (token == '@' || token == '.')
-				{
-					GetWord(word);
-					strcpy(labl,lastLabl);
-					labl[strlen(labl)+1] = 0;
-					labl[strlen(labl)]   = token;
-					strcat(labl,word);			// labl = lastLabl + "@" + word;
-				}
-				else
-					strcpy(lastLabl,labl);
-			}
-
-			if (*linePtr == ':')
-				linePtr++;
-		}
-
-		if (condLevel > condFail)
-		{
-			listThisLine = FALSE;
-
-			// inside failed IF statement
-			if (GetOpcode(opcode))
-			{
-				FindOpcode(opcode, &typ, &parm, &macro);
-
-				switch(typ)
-				{
-					case o_IF:
-						condLevel++;
-						break;
-
-					case o_ELSE:
-						if (condLevel == condFail+1)
-						{	// previous IF was false
-							listThisLine = TRUE;
-
-							if (condLevel < MAX_COND && condElse[condLevel])
-								Error("Multiple ELSE statements in an IF block");
-							else
-							{
-								if (condLevel < MAX_COND)
-									condElse[condLevel] = TRUE;
-
-								condFail++;
-							}
-						}
-						break;
-
-					case o_ELSIF:
-						if (condLevel == condFail+1)
-						{	// previous IF was false
-							listThisLine = TRUE;
-
-							if (condLevel < MAX_COND && condElse[condLevel])
-								Error("Multiple ELSE statements in an IF block");
-							else
-							{
-								i = Eval();
-								if (!errFlag && i != 0)
-									condFail++;
-							}
-						}
-						break;
-
-					case o_ENDIF:
-						condLevel--;
-						if (condLevel == condFail)
-							listThisLine = TRUE;
-						break;
-
-					default:	// ignore any other lines
-						break;
-				}
-			}
-
-			if (pass == 2 && listThisLine && (errFlag || listMacFlag || !macLineFlag))
-				ListOut();
-		}
-		else
-		{
-			token = GetOpcode(opcode);
-			if (token == 0 || token == '*')			// line with label only
-			{
-				DefSym(labl,locPtr,FALSE,FALSE);
-			}
-			else
-			{
-				FindOpcode(opcode, &typ, &parm, &macro);
-
-				if (typ == o_Illegal)
-				{
-					sprintf(word,"Illegal opcode '%s'",opcode);
-					Error(word);
-				}
-				else if (typ == o_MacName)
-				{
-					if (macPtr)
-						Error("Nested macros not supported");
-					else
-					{
-						macPtr  = macro;
-						macLine = macro -> text;
-
-						GetMacParms(macro);
-
-						showAddr = TRUE;
-						DefSym(labl,locPtr,FALSE,FALSE);
-					}
-				}
-				else if (typ >= o_LabelOp)
-				{
-					showAddr = FALSE;
-					DoLabelOp(typ,parm,labl);
-				}
-				else
-				{
-					showAddr = TRUE;
-					DefSym(labl,locPtr,FALSE,FALSE);
-					DoOpcode(typ, parm);
-				}
-
-				if (typ != o_Illegal && typ != o_MacName)
-					if (!errFlag && GetWord(word))
-						Error("Too many operands");
-			}
-
-			if (pass == 1)
-				AddLocPtr(abs(instrLen));
-			else
-			{
-				if (showAddr)
-				{
-					sprintf(word,"%.4X",locPtr);	// codPtr
-					for (i=0; i<4; i++)
-						listLine[i] = word[i];
-				}
-
-				if (instrLen>0)
-					for (i = 0; i < instrLen; i++)
-					{
-						sprintf(word,"%.2X",instr[i]);
-						listLine[i*2+5] = word[0];
-						listLine[i*2+6] = word[1];
-						CodeOut(instr[i]);
-				}
-				else if (instrLen<0)
-				{
-					for (i = 0; i < -instrLen; i++)
-					{
-						if (i > 0 && i % 5 == 0)
-						{
-							if (listThisLine)
-								ListOut();
-							strcpy(listLine, "                ");		// 16 blanks
-							sprintf(word,"%.4X",locPtr);
-							listLine[0] = word[0];
-							listLine[1] = word[1];
-							listLine[2] = word[2];
-							listLine[3] = word[3];
-						}
-						sprintf(word,"%.2X",bytStr[i]);
-						if (i<5)
-						{
-							listLine[i*2+5] = word[0];
-							listLine[i*2+6] = word[1];
-						}
-						else
-						{
-							listLine[(i%5)*2+5] = word[0];
-							listLine[(i%5)*2+6] = word[1];
-							listLine[(i%5)*2+7] = 0;
-						}
-						CodeOut(bytStr[i]);
-					}
-				}
-
-				if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
-					ListOut();
-			}
-		}
-
+		DoLine();
 		i = ReadSourceLine(line, sizeof(line));
 	}
 
@@ -2979,6 +3427,13 @@ void DoPass()
 
 // --------------------------------------------------------------
 // initialization and parameters
+
+
+void stdversion(void)
+{
+    fprintf(stderr,"%s version %s\n",versionName,versionNum);
+//	fprintf(stderr,version);
+}
 
 
 void stdusage(void)

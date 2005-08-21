@@ -66,10 +66,10 @@
 	DS	9		; 39
 	DS	10		; 3A
 	DS	11		; 3B
-	DS	12		; 3C
-	DS	13		; 3D
-	DS	14		; 3E
-	DS	15		; 3F
+	DS	S		; 3C
+	DS	I		; 3D
+	DS	D		; 3E
+	DB	$3F		; 3F (undefined)
 
 	LR	A,0		; 40
 	LR	A,1		; 41
@@ -83,10 +83,10 @@
 	LR	A,9		; 49
 	LR	A,10		; 4A - this is why register numbers must be decimal!
 	LR	A,11		; 4B
-	LR	A,12		; 4C
-	LR	A,13		; 4D
-	LR	A,14		; 4E
-	LR	A,15		; 4F
+	LR	A,S		; 4C
+	LR	A,I		; 4D
+	LR	A,D		; 4E
+	DB	$4F		; 4F (undefined)
 
 	LR	0,A		; 50
 	LR	1,A		; 51
@@ -100,10 +100,10 @@
 	LR	9,A		; 59
 	LR	10,A		; 5A - this is why register numbers must be decimal!
 	LR	11,A		; 5B
-	LR	12,A		; 5C
-	LR	13,A		; 5D
-	LR	14,A		; 5E
-	LR	15,A		; 5F
+	LR	S,A		; 5C
+	LR	I,A		; 5D
+	LR	D,A		; 5E
+	DB	$5F		; 5F (undefined)
 
 	LISU	0		; 60
 	LISU	1		; 61
@@ -140,14 +140,14 @@
 	LIS	14		; 7E
 	LIS	15		; 7F
 
-	BT	0,.		; 80 FE
-	BT	1,.		; 81 FE
-	BT	2,.		; 82 FE
-	BT	3,.		; 83 FE
-	BT	4,.		; 84 FE
-	BT	5,.		; 85 FE
-	BT	6,.		; 86 FE
-	BT	7,.		; 87 FE
+	BT	0,.		; 80 FF
+	BT	1,.		; 81 FF
+	BT	2,.		; 82 FF
+	BT	3,.		; 83 FF
+	BT	4,.		; 84 FF
+	BT	5,.		; 85 FF
+	BT	6,.		; 86 FF
+	BT	7,.		; 87 FF
 
 	AM			; 88
 	AMD			; 89
@@ -156,24 +156,24 @@
 	XM			; 8C
 	CM			; 8D
 	ADC			; 8E
-	BR7	.		; 8F FE
+	BR7	.		; 8F FF
 
-	BF	0,.		; 90 FE
-	BF	1,.		; 91 FE
-	BF	2,.		; 92 FE
-	BF	3,.		; 93 FE
-	BF	4,.		; 94 FE
-	BF	5,.		; 95 FE
-	BF	6,.		; 96 FE
-	BF	7,.		; 97 FE
-	BF	8,.		; 98 FE
-	BF	9,.		; 99 FE
-	BF	10,.		; 9A FE
-	BF	11,.		; 9B FE
-	BF	12,.		; 9C FE
-	BF	13,.		; 9D FE
-	BF	14,.		; 9E FE
-	BF	15,.		; 9F FE
+	BF	0,.		; 90 FF
+	BF	1,.		; 91 FF
+	BF	2,.		; 92 FF
+	BF	3,.		; 93 FF
+	BF	4,.		; 94 FF
+	BF	5,.		; 95 FF
+	BF	6,.		; 96 FF
+	BF	7,.		; 97 FF
+	BF	8,.		; 98 FF
+	BF	9,.		; 99 FF
+	BF	10,.		; 9A FF
+	BF	11,.		; 9B FF
+	BF	12,.		; 9C FF
+	BF	13,.		; 9D FF
+	BF	14,.		; 9E FF
+	BF	15,.		; 9F FF
 
 	INS	0		; A0
 	INS	1		; A1
@@ -221,10 +221,10 @@
 	AS	9		; C9
 	AS	10		; CA
 	AS	11		; CB
-	AS	12		; CC
-	AS	13		; CD
-	AS	14		; CE
-	AS	15		; CF
+	AS	S		; CC
+	AS	I		; CD
+	AS	D		; CE
+	DB	$CF		; CF (undefined)
 
 	ASD	0		; D0
 	ASD	1		; D1
@@ -238,10 +238,10 @@
 	ASD	9		; D9
 	ASD	10		; DA
 	ASD	11		; DB
-	ASD	12		; DC
-	ASD	13		; DD
-	ASD	14		; DE
-	ASD	15		; DF
+	ASD	S		; DC
+	ASD	I		; DD
+	ASD	D		; DE
+	DB	$DF		; DF (undefined)
 
 	XS	0		; E0
 	XS	1		; E1
@@ -255,10 +255,10 @@
 	XS	9		; E9
 	XS	10		; EA
 	XS	11		; EB
-	XS	12		; EC
-	XS	13		; ED
-	XS	14		; EE
-	XS	15		; EF
+	XS	S		; EC
+	XS	I		; ED
+	XS	D		; EE
+	DB	$EF		; EF (undefined)
 
 	NS	0		; F0
 	NS	1		; F1
@@ -272,19 +272,19 @@
 	NS	9		; F9
 	NS	10		; FA
 	NS	11		; FB
-	NS	12		; FC
-	NS	13		; FD
-	NS	14		; FE
-	NS	15		; FF
+	NS	S		; FC
+	NS	I		; FD
+	NS	D		; FE
+	DB	$FF		; FF (undefined)
 
 ; alternate mnemonics
 
 	CLR			; 70
-	BP	.		; 81 FE
-	BC	.		; 82 FE
-	BZ	.		; 84 FE
-	BR	.		; 90 FE
-	BM	.		; 91 FE
-	BNC	.		; 92 FE
-	BNZ	.		; 94 FE
-	BNO	.		; 98 FE
+	BP	.		; 81 FF
+	BC	.		; 82 FF
+	BZ	.		; 84 FF
+	BR	.		; 90 FF
+	BM	.		; 91 FF
+	BNC	.		; 92 FF
+	BNZ	.		; 94 FF
+	BNO	.		; 98 FF
