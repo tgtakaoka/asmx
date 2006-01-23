@@ -10,7 +10,7 @@
 
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 
-#define versionNum "1.7.2"
+#define versionNum "1.7.3"
 #define copyright "Copyright 1998-2005 Bruce Tomlin"
 #define IHEX_SIZE	32			// max number of data bytes per line in intel hex format
 #define MAXSYMLEN	19			// max symbol length (only used in DumpSym())
@@ -19,7 +19,7 @@ const int symTabCols = 3;		// number of columns for symbol table dump
 #define MAX_INCLUDE 10			// maximum INCLUDE nesting level
 #define MAX_BYTSTR  1024		// size of bytStr[]
 #define MAX_COND	256			// maximum nesting level of IF blocks
-//#define MAX_MACRO   16        // maximum nesting level of MACRO invocations
+#define MAX_MACRO   10          // maximum nesting level of MACRO invocations
 #define maxOpcdLen  11          // max opcode length (for building opcode table)
 
 // these should already be defined for POSIX compatibility
@@ -108,23 +108,30 @@ typedef struct SegRec *SegPtr;
 typedef char OpcdStr[maxOpcdLen+1];
 struct OpcdRec
 {
-	OpcdStr			name;		// opcode name
-	short			typ;		// opcode type
-	u_short          parm;		// opcode parameter
+	OpcdStr         name;		// opcode name
+	short           typ;		// opcode type
+	u_short         parm;		// opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 
-MacroPtr		macPtr;				// current macro in use
-MacroLinePtr	macLine;			// current macro text pointer
-char			*macParms[MAXMACPARMS];	// pointers to current macro parameters
-Str255			macParmsLine;		// text of current macro parameters
 int				macroCondLevel;		// current IF nesting level inside a macro definition
+int             macUniqueID;        // unique ID, incremented per macro invocation
+int             macLevel;           // current macro nesting level
+int             macCurrentID[MAX_MACRO]; // current unique ID
+MacroPtr        macPtr[MAX_MACRO];  // current macro in use
+MacroLinePtr    macLine[MAX_MACRO]; // current macro text pointer
+int             numMacParms[MAX_MACRO];  // number of macro parameters
+Str255          macParmsLine[MAX_MACRO]; // text of current macro parameters
+char            *macParms[MAXMACPARMS * MAX_MACRO]; // pointers to current macro parameters
+#ifdef ENABLE_REP
+int             macRepeat[MAX_MACRO]; // repeat count for REP pseudo-op
+#endif
 
 SegPtr			curSeg;				// current segment
 SegPtr			nullSeg;			// default null segment
 
-u_short          locPtr;				// Current program address
-u_short          codPtr;				// Current program "real" address
+u_short         locPtr;				// Current program address
+u_short         codPtr;				// Current program "real" address
 int				pass;				// Current assembler pass
 bool			warnFlag;			// TRUE if warning occurred this line
 bool			errFlag;			// TRUE if error occurred this line
@@ -174,10 +181,6 @@ FILE			*(include[MAX_INCLUDE]);	// include files
 Str255			incname[MAX_INCLUDE];		// include file names
 int				incline[MAX_INCLUDE];		// include line number
 int				nInclude;			// current include file index
-
-//MacroPtr		macStack[MAX_MACRO];	// stack of currently active macros
-//MacroPtr		macLineStack[MAX_MACRO];	// stack of currently active macros
-//int           macLevel;				// current macro nesting level
 
 bool			evalKnown;			// TRUE if all operands in Eval were "known"
 
@@ -280,6 +283,7 @@ struct OpcdRec opcdTab2[] =
 
 	{"=",         o_EQU,   0},
 	{"EQU",       o_EQU,   0},
+    {":=",        o_EQU,   1},
 	{"SET",       o_EQU,   1},
 	{"DEFL",      o_EQU,   1},
 	{"ORG",       o_ORG,   0},
@@ -390,7 +394,7 @@ void Debleft(char *s)
 		p++;
 
     if (p != s)
-        while (*s++ = *p++);
+        while ((*s++ = *p++));
 }
 
 
@@ -426,7 +430,7 @@ void Uprcase(char *s)
 {
 	char *p = s;
 
-	while (*p = toupper(*p))
+	while ((*p = toupper(*p)))
 		p++;
 }
 
@@ -454,7 +458,7 @@ u_int EvalBin(char *binStr)
 	evalErr = FALSE;
 	binVal  = 0;
 
-	while (c = *binStr++)
+	while ((c = *binStr++))
 	{
 		if (c < '0' || c > '1')
 			evalErr = TRUE;
@@ -481,7 +485,7 @@ u_int EvalOct(char *octStr)
 	evalErr = FALSE;
 	octVal  = 0;
 
-	while (c = *octStr++)
+	while ((c = *octStr++))
 	{
 		if (c < '0' || c > '7')
 			evalErr = TRUE;
@@ -508,7 +512,7 @@ u_int EvalDec(char *decStr)
 	evalErr = FALSE;
 	decVal  = 0;
 
-	while (c = *decStr++)
+	while ((c = *decStr++))
 	{
 		if (!isdigit(c))
 			evalErr = TRUE;
@@ -544,7 +548,7 @@ u_int EvalHex(char *hexStr)
 	evalErr = FALSE;
 	hexVal  = 0;
 
-	while (c = *hexStr++)
+	while ((c = *hexStr++))
 	{
 		if (!ishex(c))
 			evalErr = TRUE;
@@ -656,7 +660,7 @@ int GetWord(char *word)
 }
 
 
-// same as GetWord, except it allows '.' chars in alphanumerics
+// same as GetWord, except it allows '.' chars in alphanumerics and ":=" as a token
 int GetOpcode(char *word)
 {
 	u_char	c;
@@ -673,8 +677,18 @@ int GetOpcode(char *word)
 		while (c)
 			c = *++linePtr;
 
+    // test for ":="
+    if (c == ':' && linePtr[1] == '=')
+    {
+        word[0] = ':';
+        word[1] = '=';
+        word[2] = 0;
+        linePtr = linePtr + 2;
+        return -1;
+    }
+
 	// test for end of line
-	if (c)
+	else if (c)
 	{
 		// test for alphanumeric token
 		if (isalphanum(c) || c=='.')
@@ -859,8 +873,10 @@ void GetMacParms(MacroPtr macro)
 	char	*p;
 	bool	done;
 
+    macCurrentID[macLevel] = macUniqueID++;
+
 	for (i=0; i<MAXMACPARMS; i++)
-		macParms[i] = NULL;
+		macParms[i + macLevel * MAXMACPARMS] = NULL;
 
 	// skip initial whitespace
 	c = *linePtr;
@@ -868,10 +884,10 @@ void GetMacParms(MacroPtr macro)
 		c = *++linePtr;
 
 	// copy rest of line for safekeeping
-	strcpy(macParmsLine, linePtr);
+	strcpy(macParmsLine[macLevel], linePtr);
 
 	n = 0;
-	p = macParmsLine;
+	p = macParmsLine[macLevel];
 	while (*p && *p != ';' && n<MAXMACPARMS)
 	{
 		// skip whitespace before current parameter
@@ -880,7 +896,7 @@ void GetMacParms(MacroPtr macro)
 			c = *++p;
 
 		// record start of parameter
-		macParms[n] = p;
+		macParms[n + macLevel * MAXMACPARMS] = p;
 		n++;
 
 		quote = 0;
@@ -922,17 +938,19 @@ void GetMacParms(MacroPtr macro)
 		}
 	}
 
+    numMacParms[macLevel] = n;
+
 	// terminate last parameter and point remaining parameters to null strings
 	*p = 0;
 	for (i=n; i<MAXMACPARMS; i++)
-		macParms[i] = p;
+		macParms[i + macLevel * MAXMACPARMS] = p;
 
 	// remove whitespace from end of parameter
 	for (i=0; i<MAXMACPARMS; i++)
-		if (macParms[i])
+		if (macParms[i + macLevel * MAXMACPARMS])
 		{
-			p = macParms[i] + strlen(macParms[i]) - 1;
-			while (p>=macParms[i] && (*p == ' ' || *p == 9))
+			p = macParms[i + macLevel * MAXMACPARMS] + strlen(macParms[i + macLevel * MAXMACPARMS]) - 1;
+			while (p>=macParms[i + macLevel * MAXMACPARMS] && (*p == ' ' || *p == 9))
 				*p-- = 0;
 		}
 
@@ -944,7 +962,7 @@ void GetMacParms(MacroPtr macro)
 void DoMacParms()
 {
 	int				i;
-	Str255			word;
+	Str255			word,word2;
 	MacroParmPtr	parm;
 	char			*p;		// pointer to start of word
 	char			c;
@@ -967,7 +985,7 @@ void DoMacParms()
 		if (token == -1)
 		{
 			i = 0;
-			parm = macPtr -> parms;
+			parm = macPtr[macLevel] -> parms;
 			while (parm && strcmp(parm -> name, word))
 			{
 				parm = parm -> next;
@@ -980,9 +998,9 @@ void DoMacParms()
 				// copy from linePtr to temp string
 				strcpy(word, linePtr);
 				// copy from corresponding parameter to p
-				strcpy(p, macParms[i]);
+				strcpy(p, macParms[i + macLevel * MAXMACPARMS]);
 				// point p to end of appended text
-				p = p + strlen(macParms[i]);
+				p = p + strlen(macParms[i + macLevel * MAXMACPARMS]);
 				// copy from temp to p
 				strcpy(p, word);
 				// update linePtr
@@ -1005,6 +1023,61 @@ void DoMacParms()
 			strcpy(linePtr, word);
 			// and linePtr now even points to where it should
 		}
+        // handle '\0' number of parameters operator
+        else if (token == '\\' && *linePtr == '0')
+        {
+			p = linePtr + 1;	// skip '0'
+			linePtr--;			// skip '\'
+            // make string of number of parameters
+            sprintf(word2, "%d", numMacParms[macLevel]);
+			// copy right side of chopped zone
+			strcpy(word, p);
+            // paste number
+            strcpy(linePtr, word2);
+            linePtr = linePtr + strlen(word2);
+			// paste right side at new linePtr
+			strcpy(linePtr, word);
+        }
+        // handle '\n' parameter operator
+        else if (token == '\\' && '1' <= *linePtr && *linePtr <= '9')
+        {
+            i = *linePtr - '1';
+			p = linePtr + 1;	// skip 'n'
+			linePtr--;			// skip '\'
+			// copy right side of chopped zone
+			strcpy(word, p);
+            // paste parameter
+            strcpy(linePtr, macParms[i + macLevel * MAXMACPARMS]);
+            linePtr = linePtr + strlen(macParms[i + macLevel * MAXMACPARMS]);
+			// paste right side at new linePtr
+			strcpy(linePtr, word);
+        }
+        // handle '\?' unique ID operator
+        else if (token == '\\' && *linePtr == '?')
+        {
+			p = linePtr + 1;	// skip '?'
+			linePtr--;			// skip '\'
+            // make string of number of parameters
+            sprintf(word2, "%.5d", macCurrentID[macLevel]);
+			// copy right side of chopped zone
+			strcpy(word, p);
+            // paste number
+            strcpy(linePtr, word2);
+            linePtr = linePtr + strlen(word2);
+			// paste right side at new linePtr
+			strcpy(linePtr, word);
+        }
+/* just use "\##" instead to avoid any confusion with \\ inside of DB pseudo-op
+        // handle '\\' escape
+        else if (token == '\\' && *linePtr == '\\')
+        {
+			p = linePtr + 1;	// skip second '\'
+			// copy right side of chopped zone
+			strcpy(word, p);
+			// paste right side at new linePtr
+			strcpy(linePtr, word);
+        }
+*/
 
 		// skip initial whitespace
 		c = *linePtr;
@@ -1166,7 +1239,7 @@ int RefSym(char *symName, bool *known)
 	int i;
 	Str255 s;
 
-	if (p = FindSym(symName))
+	if ((p = FindSym(symName)))
 	{
 		if (!p -> defined)
 		{
@@ -1684,11 +1757,11 @@ int Eval0(void)
 	{
 		switch(token)
 		{
-			case '&':	if (*linePtr == '&') {linePtr++; val = (val & Eval1() != 0);}
-										else			 val =  val & Eval1();
+			case '&':	if (*linePtr == '&') {linePtr++; val = ((val & Eval1()) != 0);}
+										else			 val =   val & Eval1();
 						break;
-			case '|':	if (*linePtr == '|') {linePtr++; val = (val | Eval1() != 0);}
-										else			 val =  val | Eval1();
+			case '|':	if (*linePtr == '|') {linePtr++; val = ((val | Eval1()) != 0);}
+										else			 val =   val | Eval1();
 						break;
 			case '^':   val = val ^ Eval1();
 						break;
@@ -1737,7 +1810,7 @@ int EvalBranch(int instrLen)
 	val = Eval();
 	val = val - locPtr - instrLen;
 	if (!errFlag && (val < -128 || val > 127))
-		Warning("Short branch out of range");
+		Error("Short branch out of range");
 
 	return val & 0xFF;
 }
@@ -2102,21 +2175,44 @@ int ReadLine(FILE *file, char *line, int max)
 	int c = 0;
 	int len = 0;
 
-	macLineFlag = (macLine != NULL);
-	if (macLineFlag)
+    macLineFlag = TRUE;
+
+    // if at end of macro and inside a nested macro, pop the stack
+    while (macLevel > 0 && macLine[macLevel] == NULL)
+    {
+#ifdef ENABLE_REP
+        if (macRepeat[macLevel] > 0)
+        {
+            if (macRepeat[macLevel]--)
+                macLine = macPtr[macLevel] -> text;
+            else
+            {
+                free(macPtr[macLevel]);
+                macLevel--;
+            }
+        }
+        else
+#endif
+        macLevel--;
+    }
+
+    // if there is still another macro line to process, get it
+	if (macLine[macLevel] != NULL)
 	{
-		strcpy(line, macLine -> text);
-		macLine = macLine -> next;
+		strcpy(line, macLine[macLevel] -> text);
+		macLine[macLevel] = macLine[macLevel] -> next;
 		DoMacParms();
 	}
-	else
-	{
+    else
+	{   // else we weren't in a macro or we just ran out of macro
+        macLineFlag = FALSE;
+
 		if (nInclude >= 0)
 			incline[nInclude]++;
 		else
 			linenum++;
 
-		macPtr = NULL;
+		macPtr[macLevel] = NULL;
 
 		while (max > 1)
 		{
@@ -2216,8 +2312,8 @@ void DoOpcode(int typ, int parm)
 	Str255			word,s;
 	char			*oldLine;
 	int				token;
-	u_char           ch;
-	u_char           quote;
+	u_char          ch;
+	u_char          quote;
 
     if (DoCPUOpcode(typ, parm)) return;
 
@@ -2249,7 +2345,17 @@ void DoOpcode(int typ, int parm)
 									case 'r':   ch = '\r';   break;
 									case 'n':   ch = '\n';   break;
 									case 't':   ch = '\t';   break;
-//									case 'x': // add hex, dec, etc. someday?
+									case 'x':
+                                        if (ishex(linePtr[0]) && ishex(linePtr[1]))
+                                        {
+                                            s[0] = linePtr[0];
+                                            s[1] = linePtr[1];
+                                            s[2] = 0;
+                                            linePtr = linePtr + 2;
+                                            ch = EvalHex(s);
+                                        }
+                                        break;
+                                    default:   break;
 								}
 							}
 							if (instrLen < MAX_BYTSTR)
@@ -2658,7 +2764,6 @@ void DoLabelOp(int typ, int parm, char *labl)
 				sprintf(word,"---- = %.4X",val);
 				for (i=5; i<11; i++)
 					listLine[i] = word[i];
-
 				DefSym(labl,val,parm==1,parm==0);
 			}
 			break;
@@ -2867,7 +2972,7 @@ void DoLabelOp(int typ, int parm, char *labl)
 								strcpy(lastLabl,labl);
 						}
 
-						if (*linePtr == ':')
+						if (*linePtr == ':' && linePtr[1] != '=')
 							linePtr++;
 					}
 
@@ -2984,6 +3089,13 @@ void DoLabelOp(int typ, int parm, char *labl)
 
 #ifdef ENABLE_REP
 // still under construction
+// notes:
+//      REPEAT pseudo-op should act like an inline macro
+//      1) collect all lines into new macro level
+//      2) copy parameters from previous macro level (if any)
+//      3) set repeat count for this macro level (repeat count is set to 0 for plain macro)
+//      4) when macro ends, decrement repeat count and start over if count > 0
+//      5) don't forget to dispose of the temp macro and its lines when done!
 		case o_REPEAT:
 			if (labl[0])
 			{
@@ -3041,7 +3153,7 @@ void DoLabelOp(int typ, int parm, char *labl)
 								strcpy(lastLabl,labl);
 						}
 
-						if (*linePtr == ':')
+						if (*linePtr == ':' && linePtr[1] != '=')
 							linePtr++;
 					}
 
@@ -3172,7 +3284,7 @@ void DoLine()
 				strcpy(lastLabl,labl);
 		}
 
-		if (*linePtr == ':')
+		if (*linePtr == ':' && linePtr[1] != '=')
 			linePtr++;
 	}
 
@@ -3256,18 +3368,18 @@ void DoLine()
 			}
 			else if (typ == o_MacName)
 			{
-				if (macPtr)
-					Error("Nested macros not supported");
-
-//				if (macPtr && macLevel >= MAX_MACRO)
-//					Error("Macros nested too deeply");
+				if (macPtr[macLevel] && macLevel >= MAX_MACRO)
+					Error("Macros nested too deeply");
 				else
 				{
-//					if (macPtr)
-//						macStack[macLevel++] = macPtr;
+					if (macPtr[macLevel])
+                        macLevel++;
 
-					macPtr  = macro;
-					macLine = macro -> text;
+					macPtr [macLevel] = macro;
+					macLine[macLevel] = macro -> text;
+#ifdef ENABLE_REP
+                    macRepeat[macLevel] = 0;
+#endif
 
 					GetMacParms(macro);
 
@@ -3275,7 +3387,7 @@ void DoLine()
 					DefSym(labl,locPtr,FALSE,FALSE);
 				}
 			}
-			else if (typ > o_LabelOp)
+			else if (typ >= o_LabelOp)
 			{
 				showAddr = FALSE;
 				DoLabelOp(typ,parm,labl);
@@ -3368,7 +3480,9 @@ void DoPass()
 	listMacFlag   = FALSE;
     expandHexFlag = TRUE;
 	linenum       = 0;
-//	macLevel      = 0;
+    macLevel      = 0;
+    macUniqueID   = 0;
+    macCurrentID[0] = 0;
 
 	// reset all code pointers
 	CodeAbsOrg(0);
@@ -3569,23 +3683,23 @@ int main (int argc, char * const argv[])
 
 	// initialize and get parms
 
-	progname  = argv[0];
-	pass      = 0;
-	symTab    = NULL;
-	xferAddr  = 0;
-	xferFound = FALSE;
+	progname   = argv[0];
+	pass       = 0;
+	symTab     = NULL;
+	xferAddr   = 0;
+	xferFound  = FALSE;
 
-	macroTab  = NULL;
-	macPtr    = NULL;
-	macLine   = NULL;
-	segTab    = NULL;
-	nullSeg   = AddSeg("");
-	curSeg    = nullSeg;
+	macroTab   = NULL;
+	macPtr[0]  = NULL;
+    macLine[0] = NULL;
+	segTab     = NULL;
+	nullSeg    = AddSeg("");
+	curSeg     = nullSeg;
 
-	cl_Err    = FALSE;
-	cl_Warn   = FALSE;
-	cl_List   = FALSE;
-	cl_Obj    = FALSE;
+	cl_Err     = FALSE;
+	cl_Warn    = FALSE;
+	cl_List    = FALSE;
+	cl_Obj     = FALSE;
 
 	nInclude  = -1;
 	for (i=0; i<MAX_INCLUDE; i++)

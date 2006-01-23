@@ -29,12 +29,12 @@ enum
 	o_PushPop,	// PUSH and POP instructions
 	o_Arith,	// Arithmetic instructions
 	o_Rotate,	// Z-80 rotate instructions
-	o_Bit,		// BIT, RES, and SET instructions
+//	o_Bit,		// BIT, RES, and SET instructions
 	o_IM,		// IM instruction
 	o_DJNZ,		// DJNZ instruction
-	o_RST		// RST instruction
+	o_RST,		// RST instruction
 
-//  o_Foo = o_LabelOp,
+	o_Bit = o_LabelOp	// BIT, RES, and SET instructions need to be pseudo-op to allow SET fallback
 };
 
 const char conds[] = "NZZ NCC POPEP M ";
@@ -902,47 +902,6 @@ int DoCPUOpcode(int typ, int parm)
 			}
          	break;
 
-		case o_Bit:
-            reg1 = Eval();
-            Comma();
-			GetWord(word);
-			reg2 = FindReg(word,regs);
-			switch(reg2)
-			{
-				case reg_B:
-				case reg_C:
-				case reg_D:
-				case reg_E:
-				case reg_H:
-				case reg_L:
-				case reg_A:		// BIT n,r
-					Instr2(0xCB,parm + reg1*8 + reg2);
-					break;
-
-				case reg_Paren:		// BIT n,(HL)
-					GetWord(word);
-                     reg2 = FindReg(word,regs);
-					 switch(reg2)
-					 {
-						case reg_HL:
-                              RParen();
-                              Instr2(0xCB,parm + reg1*8 + reg_M);
-                        	break;
-
-						case reg_IX:
-						case reg_IY:
-							val = IXOffset();
-							if (reg2 == reg_IX)	Instr4(0xDD,0xCB,val,parm + reg1*8 + reg_M);
-							else				Instr4(0xFD,0xCB,val,parm + reg1*8 + reg_M);
-                        	break;
-
-						default:
-							IllegalOperand();
-                	}
-                	break;
-          	}
-        	break;
-
 		case o_IM:
 			GetWord(word);
 			if (word[1])
@@ -1003,11 +962,83 @@ int DoCPUOpcode(int typ, int parm)
 
 int DoCPULabelOp(int typ, int parm, char *labl)
 {
-//	int		i,val;
-//	Str255  word;
+    int		val;
+    Str255  word;
+	char	*oldLine;
+	int		token;
+	int		reg1;
+	int		reg2;
 
 	switch(typ)
 	{
+        // o_Bit needs to be implemented like a pseudo-op so that
+        //        SET can fall back to the standard SET pseudo-op
+		case o_Bit:
+            oldLine = linePtr;
+            reg1 = Eval();                  // get bit number
+            token = GetWord(word);          // attempt to get comma
+            // if end of line and SET opcode
+            if (token == 0 && parm == 0xC0)
+            {
+                linePtr = oldLine;
+                if (!errFlag || pass < 2)   // don't double-error on second pass
+                    DoLabelOp(o_EQU, 1, labl);  // fall back to SET pseudo-op
+            }
+            else
+            {
+                DefSym(labl,locPtr,FALSE,FALSE); // define label if present
+                showAddr = TRUE;
+                if (token != ',')           // validate that comma is present
+                {
+                    Error("\",\" expected");
+                    return 1;
+                }
+                if (GetWord(word) == 0)     // validate that register is present
+                {
+                    MissingOperand();
+                    return 1;
+                }
+                reg2 = FindReg(word,regs);
+                switch(reg2)
+                {
+                    case reg_B:
+                    case reg_C:
+                    case reg_D:
+                    case reg_E:
+                    case reg_H:
+                    case reg_L:
+                    case reg_A:         // BIT n,r
+                        Instr2(0xCB,parm + reg1*8 + reg2);
+                        break;
+
+                    case reg_Paren:		// BIT n,(HL)
+                        GetWord(word);
+                        reg2 = FindReg(word,regs);
+                        switch(reg2)
+                        {
+                            case reg_HL:
+                                RParen();
+                                Instr2(0xCB,parm + reg1*8 + reg_M);
+                                break;
+
+                            case reg_IX:
+                            case reg_IY:
+                                val = IXOffset();
+                                if (reg2 == reg_IX)	Instr4(0xDD,0xCB,val,parm + reg1*8 + reg_M);
+                                else				Instr4(0xFD,0xCB,val,parm + reg1*8 + reg_M);
+                                break;
+
+                            default:
+                                IllegalOperand();
+                        }
+                        break;
+
+                    default:            // invalid or unknown register
+                        IllegalOperand();
+                }
+            }
+        	break;
+
 		default:
 			return 0;
 			break;

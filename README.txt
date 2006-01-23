@@ -1,4 +1,4 @@
-ASMX semi-generic 8-bit assembler
+ASMX semi-generic 8-bit assembler
 
  - - -
 
@@ -58,15 +58,15 @@ yet at this point in the first pass.  Then the assembler can know
 to use the longer form to avoid a phase error.  The 6809 assembler
 syntax uses "<" (force 8-bits) and ">" (force 16-bits) to override
 this decision.  The 6502 assembler can also override this with a
-">" before an absolute or absolute-indexed address operand.  Note
+">" before an absolute or absolute-indexed address operand.  (Note
 that this usage is different from "<" and ">" as a high/low byte
-of a word value.
+of a word value.)
 
 Some assemblers like to output code in binary.  This might be nice
 if you're making a video game cartridge ROM, but it's really not
 very flexible.  Intel and Motorola both came up with very nice text
 file formats which don't require any kind of padding when you do an
-ORG instruction, and don't require a silly "segment" definitions
+ORG instruction, and don't require silly "segment" definitions
 just to keep DS instructions from generating object code.  Then,
 following the Unix philosophy of making tools that can connect to
 other tools, you can pipe the object code to another utility which
@@ -285,7 +285,7 @@ DB / FCB / BYTE / .BYTE / DC.B
   double quotes.  Doubled quotes inside a string assemble to a quote
   character.  The backslash ("\") can escape a quote, or it can
   represent a tab ("\t"), linefeed ("\n"), or carriage return ("\r")
-  character.  Hex escapes ("\0xnnn") are not supported.
+  character.  Hex escapes ("\xFF") are also supported.
 
 DW / FDB / WORD / .WORD / DC.W
 
@@ -358,10 +358,11 @@ END
   This marks the end of code.  After the END statement, all input is 
   ignored except for LIST and OPT lines.
 
-EQU / = / SET
+EQU / = / SET / :=
 
   Sets a label to a value.  The difference between EQU and SET is that
   a SET label is allowed to be redefined later in the source code.
+  EQU and '=' are equivalent, and SET and ':=' are equivalent.
 
 ORG
 
@@ -432,6 +433,9 @@ MACRO / ENDM
   used as an opcode.  Parameters are defined on the MACRO line,
   and replace values used inside the macro.
 
+  Macro calls can be nested to a maximum of 10 levels.  (This can
+  be changed in asmguts.h if you really need it bigger.)
+
   Example:
      TWOBYTES  MACRO parm1, parm2     ; start recording the macro
                DB    parm1, parm2
@@ -447,6 +451,10 @@ MACRO / ENDM
                DB    (parm)+5
                ENDM
 
+  When a macro is invoked with insufficient parameters, the remaining
+  parameters are replaced with a null string.  It is an error to invoke
+  a macro with too many parameters.
+
   Macro parameters can be inserted without surrounding whitespace
   by using the '##' concatenation operator.
 
@@ -457,6 +465,15 @@ MACRO / ENDM
 
                TEST  HERE ; labl ## 1 gets replaced with "HERE1"
                           ; labl ## 2 gets replaced with "HERE2"
+
+  Macro parameters can also be inserted by using the backslash ("\")
+  character.  This method also includes a way to access the actual
+  number of macro parameters supplied, and a unique identifier for
+  creating temporary labels.
+
+  \0 = number of macro parameters
+  \1..\9 = nth macro parameter
+  \? = unique ID per macro invocation (padded with leading zeros to five digits)
 
 IF expr / ELSE / ELSIF expr / ENDIF
 
@@ -786,7 +803,7 @@ Version 1.7.1 changes (2004-10-20)
 
  - - -
 
-Version 1.7.2 changes (2005-03-02)
+Version 1.7.2 changes (2005-08-21)
 
 * Added the SUBROUTINE pseudo-op.
 
@@ -847,10 +864,41 @@ Version 1.7.2 changes (2005-03-02)
 * All standard pseudo-ops can now optionally start with a period, such as .DB, .DW,
   .EQU, etc.
 
-* Standard pseudo-ops can start with a period in column 1.
+* Standard pseudo-ops can now start with a period in column 1.
 
 * Symbol table output handles long symbols better by stretching really long symbol
   names into multiple columns.
+
+ - - -
+
+Version 1.7.3 changes (2006-01-23)
+
+* Added "\0".."\9" macro parameter substitution as per the ASnn series of assemblers
+  at http://www.kingswood-consulting.co.uk/assemblers/.  Even though it seems a bit
+  silly to have more than one way to access macro parameters, this does provide a way
+  to get the number of macro parameters, and to generate unique labels inside a macro.
+
+  \0 = number of macro parameters
+  \1..\9 = nth macro parameter
+  \? = unique ID per macro invocation (padded with leading zeros to five digits)
+
+* 6809 SETDP pseudo-op was broken by the opcode table rearrangement in 1.7.2.  It
+  has been fixed.
+
+* Added the ":=" pseudo-op as an alias for the "SET" pseudo-op.
+
+* Multi-level nested macros have been implemented.
+
+* The "SET" pseudo-op now works properly for Z-80.  The SET opcode was hiding access
+  to the pseudo-op, though other variations (".SET" and ":=") would still work.  This
+  fix is tricky enough that there may be some wierd side-effects in error situations.
+  Some bugs with Z-80 SET opcode error handling were fixed as well.
+
+* Added backslash hex escapes ("\xFF") for strings in DB pseudo-op.
+
+* "Short branch out of range" was changed from a warning to an error.
+
+* Added an 8051 assembler back-end.
 
  - - -
 
@@ -858,7 +906,11 @@ To do:
 
 * Implement REP (or REPEAT) pseudo-op (currently under construction).
 
-* Implement multi-level nested macros.
+* Implement ".FOO." operators? (.SHL. .AND. .OR., etc.)
+
+* Unify all assemblers into a single binary (long term 2.0 goal).
+
+* Linkable/relocatable object code files (long term 3.0 goal).
 
  - - -
 
