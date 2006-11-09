@@ -1,4 +1,4 @@
-// asmf8.c
+// asmf8.c - copyright 1998-2006 Bruce Tomlin
 
 #include <stdio.h>
 #include <ctype.h>

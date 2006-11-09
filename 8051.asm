@@ -2,7 +2,7 @@
 
 dir     equ     'D'
 imm     equ     'I'
-bit     equ     0x08
+bit     equ     0x28
 b       equ     0x02
 ad16    equ     $1234
 

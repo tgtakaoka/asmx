@@ -1,4 +1,4 @@
-// asm68HC11.c - copyright 1998-2005 Bruce Tomlin
+// asm68HC11.c - copyright 1998-2006 Bruce Tomlin
 
 //#define DEBUG_PASS
 

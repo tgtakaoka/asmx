@@ -1,4 +1,4 @@
-// asmguts.h - copyright 1998-2005 Bruce Tomlin
+// asmguts.h - copyright 1998-2006 Bruce Tomlin
 
 //#include <stdio.h>
 //#include <ctype.h>
@@ -10,8 +10,8 @@
 
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 
-#define versionNum "1.7.3"
-#define copyright "Copyright 1998-2005 Bruce Tomlin"
+#define versionNum "1.7.4"
+#define copyright "Copyright 1998-2006 Bruce Tomlin"
 #define IHEX_SIZE	32			// max number of data bytes per line in intel hex format
 #define MAXSYMLEN	19			// max symbol length (only used in DumpSym())
 const int symTabCols = 3;		// number of columns for symbol table dump
@@ -150,18 +150,19 @@ bool			listMacFlag;		// FALSE to suppress showing macro expansions
 bool			macLineFlag;		// TRUE if line came from a macro
 int				linenum;			// line number in main source file
 bool            expandHexFlag;      // TRUE to expand long hex data to multiple listing lines
+bool            symtabFlag;         // TRUE to show symbol table in listing
 
-int				condLevel;			// current IF nesting level
-int				condFail;			// highest non-failed IF nesting level
-char			condElse[MAX_COND]; // TRUE if IF encountered on each nesting level
+int             condLevel;			// current IF nesting level
+int             condFail;			// highest non-failed IF nesting level
+char            condElse[MAX_COND]; // TRUE if IF encountered on each nesting level
 
-u_char           instr[INSTR_MAX];   // Current instruction word
-int				instrLen;			// Current instruction length (negative to use bytStr)
+u_char          instr[INSTR_MAX];   // Current instruction word
+int             instrLen;			// Current instruction length (negative to use bytStr)
 
-u_char           bytStr[MAX_BYTSTR]; // Buffer for long DB statements
-bool			showAddr;			// TRUE to show LocPtr on listing
-u_short          xferAddr;			// Transfer address from END pseudo
-bool			xferFound;			// TRUE if xfer addr defined w/ END
+u_char          bytStr[MAX_BYTSTR]; // Buffer for long DB statements
+bool            showAddr;			// TRUE to show LocPtr on listing
+u_short         xferAddr;			// Transfer address from END pseudo
+bool            xferFound;			// TRUE if xfer addr defined w/ END
 
 //	Command line parameters
 Str255			cl_SrcName;			// Source file name
@@ -196,6 +197,7 @@ enum
 	o_DS,		// DS pseudo-op
 	o_HEX,		// HEX pseudo-op
 	o_FCC,		// FCC pseudo-op
+    o_ZSCII,    // ZSCII pseudo-op
 	o_ALIGN,	// ALIGN pseudo-op
 
 	o_END,		// END pseudo-op
@@ -265,21 +267,22 @@ struct OpcdRec opcdTab2[] =
 #endif
 #endif
 
-	{"DS",      o_DS,  1},
-	{"DS.B",    o_DS,  1},
-	{"RMB",     o_DS,  1},
-	{"BLKB",    o_DS,  1},
-	{"DS.W",    o_DS,  2},
-	{"BLKW",    o_DS,  2},
-	{"HEX",     o_HEX, 0},
-	{"FCC",     o_FCC, 0},
-	{"END",     o_END, 0},
-	{"ENDM",    o_ENDM,0},
-	{"ALIGN",   o_ALIGN,  0},
+	{"DS",      o_DS,   1},
+	{"DS.B",    o_DS,   1},
+	{"RMB",     o_DS,   1},
+	{"BLKB",    o_DS,   1},
+	{"DS.W",    o_DS,   2},
+	{"BLKW",    o_DS,   2},
+	{"HEX",     o_HEX,  0},
+	{"FCC",     o_FCC,  0},
+	{"ZSCII",   o_ZSCII,0},
+	{"END",     o_END,  0},
+	{"ENDM",    o_ENDM, 0},
+	{"ALIGN",   o_ALIGN,0},
 #ifdef ENABLE_REP
-	{"REPEND",  o_REPEND, 0},
+	{"REPEND",  o_REPEND,  0},
 #endif
-	{"INCLUDE", o_Include,0},
+	{"INCLUDE", o_Include, 0},
 
 	{"=",         o_EQU,   0},
 	{"EQU",       o_EQU,   0},
@@ -613,6 +616,174 @@ u_int EvalNum(char *word)
 
 
 // --------------------------------------------------------------
+// ZSCII conversion routines
+
+    u_char  zStr[MAX_BYTSTR];   // output data buffer
+    int     zLen;               // length of output data
+    int     zOfs,zPos;          // current output offset (in bytes) and bit position
+    int     zShift;             // current shift lock status (0, 1, 2)
+    char    zSpecial[] = "0123456789.,!?_#'\"/\\<-:()"; // special chars table
+
+void InitZSCII(void)
+{
+    zOfs = 0;
+    zPos = 0;
+    zLen = 0;
+    zShift = 0;
+}
+
+
+void PutZSCII(char nib)
+{
+    nib = nib & 0x1F;
+
+    // is it time to start a new word?
+    if (zPos == 3)
+    {
+        // check for overflow
+        if (zOfs >= MAX_BYTSTR)
+        {
+            if (!errFlag) Error("ZSCII string length overflow");
+            return;
+        }
+        zOfs = zOfs + 2;
+        zPos = 0;
+    }
+
+    switch(zPos)
+    {
+        case 0:
+            zStr[zOfs] = nib << 2;
+            break;
+
+        case 1:
+            zStr[zOfs] |= nib >> 3;
+            zStr[zOfs+1] = nib << 5;
+            break;
+
+        case 2:
+            zStr[zOfs+1] |= nib;
+            break;
+
+        default:    // this shouldn't happen!
+            break;
+    }
+
+    zPos++;
+}
+
+
+void PutZSCIIShift(char shift, char nshift)
+{
+    int lock;
+
+    lock = 0;                       // only do a temp shift if next shift is different
+    if (shift == nshift) lock = 2;  // generate shift lock if next shift is same
+
+    switch ((shift - zShift + 3) % 3)
+    {
+        case 0: // no shift
+            break;
+
+        case 1: // shift forward
+            PutZSCII(0x02 + lock);
+            break;
+
+        case 2: // shift backwards
+            PutZSCII(0x03 + lock);
+            break;
+    }
+
+    if (lock) zShift = shift;       // update shift lock state
+}
+
+
+void EndZSCII(void)
+{
+    // pad final word with shift nibbles
+    while (zPos != 3)
+        PutZSCII(0x05);
+
+    // set high bit in final word as end-of-text marker
+    zStr[zOfs] |= 0x80;
+
+    zOfs = zOfs + 2;
+}
+
+
+int GetZSCIIShift(char ch)
+{
+        if (ch == ' ')  return -2;
+        if (ch == '\n') return -1;
+        if ('a' <= ch && ch <= 'z') return 0;
+        if ('A' <= ch && ch <= 'Z') return 1;
+        return 2;
+}
+
+
+void ConvertZSCII(void)
+{
+    //  input data is in bytStr[]
+    //  input data length is -instrLen
+
+    int     i,inpos;            // input position
+    char    ch;                 // current and next input byte
+    char    *p;                 // pointer for looking up special chars
+    int     shift,nshift;       // current and next shift states
+
+    InitZSCII();
+
+    inpos = 0;
+    while (inpos < -instrLen)
+    {
+        // get current char and shift
+        ch = bytStr[inpos];
+        shift = GetZSCIIShift(ch);
+
+        // determine next char's shift (skipping blanks and newlines, stopping at end of data)
+        i = inpos + 1;
+        while (i < -instrLen && (nshift = GetZSCIIShift(bytStr[i])) < 0) i++;
+        if (i >= -instrLen) nshift = zShift;    // if end of data, use current shift as "next" shift
+
+        switch(shift)
+        {
+            case 0: // alpha lower case
+            case 1: // alpha upper case
+                PutZSCIIShift(shift,nshift);
+                PutZSCII(ch - 'A' + 6);
+                break;
+
+            case 2: // non-alpha
+                if ((p = strchr(zSpecial,ch)))
+                {   // numeric and special chars
+                    PutZSCIIShift(shift,nshift);
+                    PutZSCII(p - zSpecial + 7);
+                }
+                else
+                {   // extended char
+                    PutZSCIIShift(shift,nshift);
+                    PutZSCII(0x06);
+                    PutZSCII(ch >> 5);
+                    PutZSCII(ch);
+                }
+                break;
+
+            default: // blank and newline
+                PutZSCII(shift + 2);
+                break;
+        }
+
+        inpos++;
+    }
+
+    EndZSCII();
+
+    memcpy(bytStr,zStr,zOfs);
+    instrLen = -zOfs;
+}
+
+
+// --------------------------------------------------------------
 // token handling
 
 // returns 0 for end-of-line, -1 for alpha-numeric, else char value for non-alphanumeric
@@ -714,7 +885,7 @@ int GetOpcode(char *word)
 }
 
 
-void Expect(char *expected)
+bool Expect(char *expected)
 {
 	Str255 s;
 	GetWord(s);
@@ -722,19 +893,21 @@ void Expect(char *expected)
 	{
 		sprintf(s,"\"%s\" expected",expected);
 		Error(s);
+        return 1;
 	}
+    return 0;
 }
 
 
-void Comma()
+bool Comma()
 {
-	Expect(",");
+	return Expect(",");
 }
 
 
-void RParen()
+bool RParen()
 {
-	Expect(")");
+	return Expect(")");
 }
 
 
@@ -2319,6 +2492,7 @@ void DoOpcode(int typ, int parm)
 
 	switch(typ)
 	{
+        case o_ZSCII:
 		case o_DB:
 			instrLen = 0;
 			oldLine = linePtr;
@@ -2406,6 +2580,9 @@ void DoOpcode(int typ, int parm)
 				instrLen = MAX_BYTSTR;
 			}
             instrLen = -instrLen;
+
+            if (typ == o_ZSCII)
+                ConvertZSCII();
 			break;
 
 		case o_DWLE:	// little-endian DW
@@ -2761,7 +2938,7 @@ void DoLabelOp(int typ, int parm, char *labl)
 			{
 				val = Eval();
 
-				sprintf(word,"---- = %.4X",val);
+				sprintf(word,"---- = %.4X",val & 0xFFFF);
 				for (i=5; i<11; i++)
 					listLine[i] = word[i];
 				DefSym(labl,val,parm==1,parm==0);
@@ -2783,7 +2960,7 @@ void DoLabelOp(int typ, int parm, char *labl)
 
             if (pass == 2)
 			{
-				sprintf(word,"%.4X = %.4X",codPtr,val);
+				sprintf(word,"%.4X = %.4X",codPtr,val & 0xFFFF);
 				for (i=0; i<11; i++)
 					listLine[i] = word[i];
 			}
@@ -2835,6 +3012,8 @@ void DoLabelOp(int typ, int parm, char *labl)
 			else if (strcmp(word,"NOMACRO") == 0)	listMacFlag = FALSE;
             else if (strcmp(word,"EXPAND") == 0)    expandHexFlag = TRUE;
             else if (strcmp(word,"NOEXPAND") == 0)  expandHexFlag = FALSE;
+            else if (strcmp(word,"SYM") == 0)       symtabFlag = TRUE;
+            else if (strcmp(word,"NOSYM") == 0)     symtabFlag = FALSE;
 			else									IllegalOperand();
 
 			break;
@@ -2862,6 +3041,8 @@ void DoLabelOp(int typ, int parm, char *labl)
 			else if (strcmp(word,"NOMACRO") == 0)	listMacFlag = FALSE;
             else if (strcmp(word,"EXPAND") == 0)    expandHexFlag = TRUE;
             else if (strcmp(word,"NOEXPAND") == 0)  expandHexFlag = FALSE;
+            else if (strcmp(word,"SYM") == 0)       symtabFlag = TRUE;
+            else if (strcmp(word,"NOSYM") == 0)     symtabFlag = FALSE;
 			else									Error("Illegal option");
 
 			break;
@@ -3067,6 +3248,9 @@ void DoLabelOp(int typ, int parm, char *labl)
 					Error("Multiple ELSE statements in an IF block");
 				else
 				{
+					// i = Eval(); // evaluate condition and ignore result
+					EatIt(); // just ignore the conditional expression
+
 					if (condLevel < MAX_COND)
 						condElse[condLevel] = FALSE;
 
@@ -3422,7 +3606,7 @@ void DoLine()
 					listLine[i*2+5] = word[0];
 					listLine[i*2+6] = word[1];
 					CodeOut(instr[i]);
-			}
+				}
 			else if (instrLen<0)
 			{
 				for (i = 0; i < -instrLen; i++)
@@ -3431,7 +3615,7 @@ void DoLine()
                     {
                         if (i > 0 && i % 5 == 0)
                         {
-                            if (listThisLine)
+                            if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
                                 ListOut();
                             strcpy(listLine, "                ");		// 16 blanks
                             sprintf(word,"%.4X",locPtr);
@@ -3479,6 +3663,7 @@ void DoPass()
 	listFlag      = TRUE;
 	listMacFlag   = FALSE;
     expandHexFlag = TRUE;
+    symtabFlag    = TRUE;
 	linenum       = 0;
     macLevel      = 0;
     macUniqueID   = 0;
@@ -3762,8 +3947,11 @@ int main (int argc, char * const argv[])
 	if (cl_List)	fprintf(listing, "\n%.5d Total Error(s)\n\n", errCount);
 	if (cl_Err)		fprintf(stderr,  "\n%.5d Total Error(s)\n\n", errCount);
 
-	SortSymTab();
-	DumpSymTab();
+    if (symtabFlag)
+    {
+        SortSymTab();
+        DumpSymTab();
+    }
 //	DumpMacroTab();
 
 	if (source)

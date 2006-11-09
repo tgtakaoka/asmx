@@ -1,4 +1,4 @@
-// asm6502.c - copyright 1998-2005 Bruce Tomlin
+// asm6502.c - copyright 1998-2006 Bruce Tomlin
 
 //#define DEBUG_PASS
 

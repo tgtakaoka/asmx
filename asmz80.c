@@ -1,4 +1,4 @@
-// asmz80.c
+// asmz80.c - copyright 1998-2006 Bruce Tomlin
 
 #include <stdio.h>
 #include <ctype.h>
@@ -37,14 +37,16 @@ enum
 	o_Bit = o_LabelOp	// BIT, RES, and SET instructions need to be pseudo-op to allow SET fallback
 };
 
-const char conds[] = "NZZ NCC POPEP M ";
+const char conds[] = "NZ Z NC C PO PE P M";
 // NZ=0 Z=1 NC=2 C=3 PO=4 PE=5 P=6 M=7
 
-const char regs[] = "B C D E H L   A I R BCDEHLSPIXIYAF( ";
+// L is in regs[] twice as a placeholder for (HL)
+const char regs[] = "B C D E H L L A I R BC DE HL SP IX IY AF (";
 
 enum regType	// these are keyed to regs[] above
 {
-	reg_None = -1,	// -1
+    reg_EOL = -2,   // -2
+    reg_None,       // -1
 	reg_B,			//  0
 	reg_C,			//  1
 	reg_D,			//  2
@@ -64,9 +66,6 @@ enum regType	// these are keyed to regs[] above
 	reg_AF,			// 16
 	reg_Paren		// 17
 };
-
-#define IS_REG_BYTE(x) (reg_B  <= (x) && (x) <= reg_A)
-#define IS_REG_WORD(x) (reg_BC <= (x) && (x) <= reg_SP)
 
 struct OpcdRec opcdTab[] =
 {
@@ -154,30 +153,51 @@ struct OpcdRec opcdTab[] =
 // --------------------------------------------------------------
 
 
-int FindReg(char *regName, const char *regList)
+int FindReg(const char *regName, const char *regList)
 {
+    const char *p;
+    int i;
 
-	const char	*p;
-	char		r0,r1;
-	int			reg;
+    i = 0;
+    while (*regList)
+    {
+        p = regName;
+        // compare words
+        while (*p && *p == *regList)
+        {
+            regList++;
+            p++;
+        }
 
-	r0 = regName[0];
-	r1 = regName[1];
-	if (r1 == 0) r1 = ' ';
-	else if (regName[2]) return reg_None;	// longer than 2 chars!
+        // if not match, skip rest of word
+        if (*p || (*regList != 0 && *regList != ' '))
+        {
+            // skip to next whitespace
+            while (*regList && *regList != ' ')
+                regList++;
+            // skip to next word
+            while (*regList == ' ')
+                regList++;
+            i++;
+        }
+        else return i;
+    }
 
-	reg = 0;
-	p = regList;
-	while (*p)
-	{
-		if (r0 == p[0] && r1 == p[1])
-			return reg;
+    return -1;
+}
 
-		p = p + 2;
-		reg++;
-	}
 
-	return reg_None;
+int GetReg(const char *regList)
+{
+    Str255  word;
+
+    if (!GetWord(word))
+    {
+        MissingOperand();
+        return -2;
+    }
+
+    return FindReg(word,regList);
 }
 
 
@@ -207,19 +227,27 @@ int IXOffset()
 }
 
 
+inline int DDFD(int reg)
+{
+    if (reg == reg_IX)
+        return 0xDD;
+    return 0xFD;
+}
+
+
 void DoArith(int imm, int reg)
 {
 
 	char		*oldLine;
 	int			reg2;
-	Str255		word;
 	int			val;
 
 	oldLine = linePtr;
-	GetWord(word);
-	reg2 = FindReg(word,regs);
-	switch(reg2)
+	switch((reg2 = GetReg(regs)))
 	{
+        case reg_EOL:
+            break;
+
 		case reg_None:	// ADD A,nn
 			linePtr = oldLine;
 			val = Eval();
@@ -237,20 +265,20 @@ void DoArith(int imm, int reg)
 			break;
 
 		case reg_Paren:	// ADD A,(
-			GetWord(word);
-			reg2 = FindReg(word,regs);
-			switch(reg2)
+            switch((reg2 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_HL:
-					RParen();
+					if (RParen()) break;
 					Instr1(reg+reg_M);
 					break;
 
 				case reg_IX:
 				case reg_IY:
 					val = IXOffset();
-					if (reg2 == reg_IX)	Instr3(0xDD,reg+reg_M,val);
-					else				Instr3(0xFD,reg+reg_M,val);
+					Instr3(DDFD(reg2),reg+reg_M,val);
 					break;
 
 				default:
@@ -285,11 +313,11 @@ int DoCPUOpcode(int typ, int parm)
 			break;
 
 		case o_LD:
-            GetWord(word);
-            reg1 = FindReg(word,regs);
-
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_None:	// LD nnnn,?
 					IllegalOperand();
 					break;
@@ -301,13 +329,13 @@ int DoCPUOpcode(int typ, int parm)
 				case reg_H:
 				case reg_L:
 				case reg_A:		// LD r,?
-					Comma();
+					if (Comma()) break;
 					oldLine = linePtr;
-					GetWord(word);
-					reg2 = FindReg(word,regs);
-
-					switch(reg2)
+                    switch((reg2 = GetReg(regs)))
 					{
+                        case reg_EOL:
+                            break;
+
 						case reg_B:
 						case reg_C:
 						case reg_D:
@@ -328,49 +356,48 @@ int DoCPUOpcode(int typ, int parm)
 
 						case reg_Paren: 	// LD r,(?)
 							oldLine = linePtr;
-							GetWord(word);
-							reg2 = FindReg(word,regs);
-
-							switch(reg2)
+                            switch((reg2 = GetReg(regs)))
 							{
-									case reg_BC:	// LD A,(BC)
-									case reg_DE:	// LD A,(DE)
-										if (reg1 != reg_A)
-											IllegalOperand();
-										else
-										{
-											RParen();
-											Instr1(0x0A + (reg2-reg_BC)*16);
-										}
-										break;
+                                case reg_EOL:
+                                    break;
 
-									case reg_HL:	// LD r,(HL)
-										RParen();
-										Instr1(0x40 + reg1*8 + reg_M);
-										break;
+                                case reg_BC:	// LD A,(BC)
+                                case reg_DE:	// LD A,(DE)
+                                    if (reg1 != reg_A)
+                                        IllegalOperand();
+                                    else
+                                    {
+                                        if (RParen()) break;
+                                        Instr1(0x0A + (reg2-reg_BC)*16);
+                                    }
+                                    break;
 
-									case reg_IX:	// LD r,(IX+d)
-									case reg_IY:	// LD r,(IY+d)
-										val = IXOffset();
-										if (reg2 == reg_IX)	Instr3(0xDD,0x46 + reg1*8,val);
-										else				Instr3(0xFD,0x46 + reg1*8,val);
-										break;
+                                case reg_HL:	// LD r,(HL)
+                                    if (RParen()) break;
+                                    Instr1(0x40 + reg1*8 + reg_M);
+                                    break;
 
-									case reg_None:	// LD A,(nnnn)
-										if (reg1 != reg_A)
-											IllegalOperand();
-										else
-										{
-											linePtr = oldLine;
-											val = Eval();
-											RParen();
-											Instr3W(0x3A,val);
-										}
-										break;
+                                case reg_IX:	// LD r,(IX+d)
+                                case reg_IY:	// LD r,(IY+d)
+                                    val = IXOffset();
+                                    Instr3(DDFD(reg2),0x46 + reg1*8,val);
+                                    break;
 
-									default:
-										IllegalOperand();
-                            	}
+                                case reg_None:	// LD A,(nnnn)
+                                    if (reg1 != reg_A)
+                                        IllegalOperand();
+                                    else
+                                    {
+                                        linePtr = oldLine;
+                                        val = Eval();
+                                        if (RParen()) break;
+                                        Instr3W(0x3A,val);
+                                    }
+                                    break;
+
+                                default:
+                                    IllegalOperand();
+                            }
                            	break;
 
 						case reg_None:	// LD r,nn
@@ -384,14 +411,14 @@ int DoCPUOpcode(int typ, int parm)
 					break;
 
 				case reg_I:		// LD I,A
-					Comma();
-					Expect("A");
+					if (Comma()) break;
+					if (Expect("A")) break;
 					Instr2(0xED,0x47);
                  	break;
 
 				case reg_R:		// LD R,A
-					Comma();
-					Expect("A");
+					if (Comma()) break;
+					if (Expect("A")) break;
 					Instr2(0xED,0x4F);
                   	break;
 
@@ -399,68 +426,92 @@ int DoCPUOpcode(int typ, int parm)
 				case reg_DE:
 				case reg_HL:
 				case reg_SP:	// LD rr,?
-					Comma();
+					if (Comma()) break;
 					oldLine = linePtr;
-					GetWord(word);
-					reg2 = FindReg(word,regs);
-
-					if (reg1 == reg_SP &&		// LD SP,HL
-						(reg2 == reg_HL || reg2 == reg_IX || reg2 == reg_IY))
+                    switch((reg2 = GetReg(regs)))
 					{
-						switch(reg2)
-						{
-							case reg_HL: Instr1(0xF9);		break;
-							case reg_IX: Instr2(0xDD,0xF9);	break;
-							case reg_IY: Instr2(0xFD,0xF9);	break;
-						}
-					}
+                        case reg_EOL:
+                            break;
 
-					else if (reg1 == reg_HL && reg2 == reg_Paren)
-					{
-						val = Eval();	// LD HL,(nnnn)
-						RParen();
-						Instr3W(0x2A,val);
-                 	}
+                        case reg_HL:    // LD SP,HL/IX/IY
+                        case reg_IX:
+                        case reg_IY:
+                            if (reg1 != reg_SP)
+                                IllegalOperand();
+                            else switch(reg2)
+                            {
+                                case reg_HL: Instr1(0xF9);		break;
+                                case reg_IX: Instr2(0xDD,0xF9);	break;
+                                case reg_IY: Instr2(0xFD,0xF9);	break;
+                            }
+                            break;
 
-					else if (reg2 == reg_Paren)
-					{
-						val = Eval();	// LD BC,(nnnn)
-						RParen();
-						Instr4W(0xED,0x4B + (reg1-reg_BC)*16,val);
-					}
+                        case reg_Paren:
+                            if (reg1 == reg_HL)
+                            {
+                                val = Eval();	// LD HL,(nnnn)
+                                if (RParen()) break;
+                                Instr3W(0x2A,val);
+                            }
+                            else
+                            {
+                                val = Eval();	// LD BC/DE/SP,(nnnn)
+                                if (RParen()) break;
+                                Instr4W(0xED,0x4B + (reg1-reg_BC)*16,val);
+                            }
 
-                  	else if (reg2 == reg_None)	// LD rr,nnnn
-					{
-                        linePtr = oldLine;
-                        val = Eval();
-                        Instr3W(0x01 + (reg1-reg_BC)*16,val);
-					}
+                            // at this point, if there is any extra stuff on the line,
+                            // backtrack and try again with reg_None case
+                            // to handle the case of LD BC,(foo + 1) * 256, etc.
+                            token = GetWord(word);
+                            if (token == 0) break;
+                            // note that if an error occurs, it will be repeated twice,
+                            // and we have to return to avoid that, but we need to make sure
+                            // the instruction length is the same in both passes or there
+                            // will be a phase error problem
+                            instrLen = 3;
+                            if (errFlag) break;
+                            // now fall through...
 
-                  	else IllegalOperand();
+                        case reg_None:	// LD rr,nnnn
+                            linePtr = oldLine;
+                            val = Eval();
+                            Instr3W(0x01 + (reg1-reg_BC)*16,val);
+                            break;
 
+                        default:
+                            IllegalOperand();
+                    }
 					break;
 
 				case reg_IX:	// LD IX,?
 				case reg_IY:	// LD IY,?
-					Comma();
+					if (Comma()) break;
 					oldLine = linePtr;
-					GetWord(word);
-					reg2 = FindReg(word,regs);
-
-					switch(reg2)
+                    switch((reg2 = GetReg(regs)))
 					{
+                        case reg_EOL:
+                            break;
+
+                        case reg_Paren:	// LD IX,(nnnn)
+							val = Eval();
+                            if (RParen()) break;
+							Instr4W(DDFD(reg1),0x2A,val);
+
+                            // at this point, if there is any extra stuff on the line,
+                            // backtrack and try again with reg_None case
+                            // to handle the case of LD IX,(foo + 1) * 256, etc.
+                            token = GetWord(word);
+                            if (token == 0) break;
+                            // note that if an error occurs, it will be repeated twice,
+                            // and we have to return to avoid that
+                            if (errFlag) break;
+                            // now fall through...
+
 						case reg_None:	// LD IX,nnnn
 							linePtr = oldLine;
 							val = Eval();
-							if (reg1 == reg_IX)	Instr4W(0xDD,0x21,val);
-							else				Instr4W(0xFD,0x21,val);
-                          	break;
-
-                       case reg_Paren:	// LD IX,(nnnn)
-							val = Eval();
-							RParen();
-							if (reg1 == reg_IX)	Instr4W(0xDD,0x2A,val);
-							else				Instr4W(0xFD,0x2A,val);
+							Instr4W(DDFD(reg1),0x21,val);
                           	break;
 
                      	default:
@@ -470,21 +521,21 @@ int DoCPUOpcode(int typ, int parm)
 
 				case reg_Paren:		// LD (?),?
 					oldLine = linePtr;
-					GetWord(word);
-					reg1 = FindReg(word,regs);
-
-					switch(reg1)
+                    switch((reg1 = GetReg(regs)))
 					{
+                        case reg_EOL:
+                            break;
+
 						case reg_None:	// LD (nnnn),?
 							linePtr = oldLine;
 							val = Eval();
-							RParen();
-							Comma();
-							GetWord(word);
-							reg2 = FindReg(word,regs);
-
-							switch(reg2)
+							if (RParen()) break;
+							if (Comma()) break;
+                            switch((reg2 = GetReg(regs)))
 							{
+                                case reg_EOL:
+                                    break;
+
 								case reg_A:  Instr3W(0x32,val); break;
 								case reg_HL: Instr3W(0x22,val); break;
 								case reg_BC:
@@ -500,49 +551,71 @@ int DoCPUOpcode(int typ, int parm)
 
 							case reg_BC:
 							case reg_DE:
-								RParen();
-								Comma();
-								Expect("A");
+								if (RParen()) break;
+								if (Comma()) break;
+								if (Expect("A")) break;
 								Instr1(0x02+(reg1-reg_BC)*16);
 								break;
 
 							case reg_HL: // LD (HL),?
-								RParen();
-								Comma();
+								if (RParen()) break;
+								if (Comma()) break;
 								oldLine = linePtr;
-								GetWord(word);
-								reg2 = FindReg(word,regs);
-                              	if (reg2 == reg_None)
-								{
-									linePtr = oldLine;
-									val = Eval();
-									Instr2(0x36,val);
+                                switch((reg2 = GetReg(regs)))
+                                {
+                                    case reg_EOL:
+                                        break;
+
+                                    case reg_None:
+                                        linePtr = oldLine;
+                                        val = Eval();
+                                        Instr2(0x36,val);
+                                        break;
+
+                                    case reg_B:
+                                    case reg_C:
+                                    case reg_D:
+                                    case reg_E:
+                                    case reg_H:
+                                    case reg_L:
+                                    case reg_A:
+                                        Instr1(0x70 + reg2);
+                                        break;
+
+                                    default:
+                                        IllegalOperand();
                              	}
-								else if (IS_REG_BYTE(reg2))
-									Instr1(0x70 + reg2);
-                              	else IllegalOperand();
 								break;
 
 							case reg_IX:
 							case reg_IY:	// LD (IX),?
 								val = IXOffset();
-								Comma();
+								if (Comma()) break;
 								oldLine = linePtr;
-								GetWord(word);
-								reg2 = FindReg(word,regs);
-                              	if (reg2 == reg_None)
-								{
-									linePtr = oldLine;
-									reg2 = Eval();
-									if (reg1 == reg_IX)	Instr4(0xDD,0x36,val,reg2);
-                                    else				Instr4(0xFD,0x36,val,reg2);
-								}
-								else if (IS_REG_BYTE(reg2))
-								{
-									if (reg1 == reg_IX)	Instr3(0xDD,0x70 + reg2,val);
-									else					Instr3(0xFD,0x70 + reg2,val);
-								}
-                              	else IllegalOperand();
+                                switch((reg2 = GetReg(regs)))
+                                {
+                                    case reg_EOL:
+                                        break;
+
+                                    case reg_None:
+                                        linePtr = oldLine;
+                                        reg2 = Eval();
+                                        Instr4(DDFD(reg1),0x36,val,reg2);
+                                        break;
+
+                                    case reg_B:
+                                    case reg_C:
+                                    case reg_D:
+                                    case reg_E:
+                                    case reg_H:
+                                    case reg_L:
+                                    case reg_A:
+                                        Instr3(DDFD(reg1),0x70 + reg2,val);
+                                        break;
+
+                                    default:
+                                        IllegalOperand();
+                                }
 								break;
 
 							default: IllegalOperand();
@@ -554,34 +627,37 @@ int DoCPUOpcode(int typ, int parm)
 			break;
 
 		case o_EX:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_DE:	// EX DE,HL }
-					Comma();
-					Expect("HL");
+					if (Comma()) break;
+					if (Expect("HL")) break;
 					Instr1(0xEB);
                  	break;
 
 				case reg_AF:	// EX AF,AF' }
-					Comma();
-					Expect("AF");
-					Expect("'");
+					if (Comma()) break;
+					if (Expect("AF")) break;
+					if (Expect("'")) break;
 					Instr1(0x08);
 					break;
 
 				case reg_Paren:	// EX (SP),? }
-					Expect("SP");
-					RParen();
-					Comma();
-					GetWord(word);
-					reg2 = FindReg(word,regs);
-					switch(reg2)
+					if (Expect("SP")) break;
+					if (RParen()) break;
+					if (Comma()) break;
+                    switch((reg2 = GetReg(regs)))
 					{
+                        case reg_EOL:
+                            break;
+
 						case reg_HL: Instr1(0xE3);      break;
 						case reg_IX: Instr2(0xDD,0xE3); break;
 						case reg_IY: Instr2(0xFD,0xE3); break;
+
                         default:
 							IllegalOperand();
                    	}
@@ -593,32 +669,50 @@ int DoCPUOpcode(int typ, int parm)
 			break;
 
 		case o_ADD:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_A:
-					Comma();
+					if (Comma()) break;
 					DoArith(0xC6,0x80);
                 	break;
 
 				case reg_HL:
 				case reg_IX:
 				case reg_IY:
-					Comma();
-					GetWord(word);
-					reg2 = FindReg(word,regs);
-					if (reg2 == reg1) reg2 = reg_HL;
-					if (IS_REG_WORD(reg2))
+					if (Comma()) break;
+                    switch((reg2 = GetReg(regs)))
 					{
-						switch(reg1)
-						{
-							case reg_HL: Instr1(0x09      + (reg2-reg_BC)*16); break;
-							case reg_IX: Instr2(0xDD,0x09 + (reg2-reg_BC)*16); break;
-							case reg_IY: Instr2(0xFD,0x09 + (reg2-reg_BC)*16); break;
-                     	}
+                        case reg_EOL:
+                            break;
+
+                        case reg_HL:
+                        case reg_IX:
+                        case reg_IY:
+                            if (reg1 != reg2)
+                            {
+                                IllegalOperand();
+                                break;
+                            }
+                            reg2 = reg_HL;
+                            // fall through
+
+                        case reg_BC:
+                        case reg_DE:
+                        case reg_SP:
+                            switch(reg1)
+                            {
+                                case reg_HL: Instr1(0x09      + (reg2-reg_BC)*16); break;
+                                case reg_IX: Instr2(0xDD,0x09 + (reg2-reg_BC)*16); break;
+                                case reg_IY: Instr2(0xFD,0x09 + (reg2-reg_BC)*16); break;
+                            }
+                            break;
+
+                        default:
+                            IllegalOperand();
                    	}
-                   	else IllegalOperand();
                  	break;
 
                	default: IllegalOperand();
@@ -626,21 +720,33 @@ int DoCPUOpcode(int typ, int parm)
         	break;
 
 		case o_ADC_SBC:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_A:
-					Comma();
+					if (Comma()) break;
 					DoArith(parm*16+0xCE,0x88+parm*16); // had to move 0xCE because GCC complained?
                  	break;
 
 				case reg_HL:
-					Comma();
-					GetWord(word);
-					reg2 = FindReg(word,regs);
-					if (IS_REG_WORD(reg2))	Instr2(0xED,0x4A + (reg2-reg_BC)*16 - parm*8);
-                    else					IllegalOperand();
+					if (Comma()) break;
+                    switch((reg2 = GetReg(regs)))
+					{
+                        case reg_EOL:
+                            break;
+
+                        case reg_BC:
+                        case reg_DE:
+                        case reg_HL:
+                        case reg_SP:
+                            Instr2(0xED,0x4A + (reg2-reg_BC)*16 - parm*8);
+                            break;
+
+                        default:
+                            IllegalOperand();
+                    }
 					break;
 
                	default:
@@ -649,10 +755,11 @@ int DoCPUOpcode(int typ, int parm)
         	break;
 
 		case o_INC_DEC:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
               	case reg_B:
 				case reg_C:
 				case reg_D:
@@ -674,20 +781,20 @@ int DoCPUOpcode(int typ, int parm)
 				case reg_IY: Instr2(0xFD,0x23 + parm*8); break;
 
 				case reg_Paren:	// INC (HL)
-					GetWord(word);
-					reg1 = FindReg(word,regs);
-					switch(reg1)
-					{
+                    switch((reg1 = GetReg(regs)))
+                    {
+                        case reg_EOL:
+                            break;
+
 						case reg_HL:
-							RParen();
+							if (RParen()) break;
 							Instr1(0x34 + parm);
 							break;
 
 						case reg_IX:
 						case reg_IY:
 							val = IXOffset();
-							if (reg1 == reg_IX)	Instr3(0xDD,0x34 + parm,val);
-                            else				Instr3(0xFD,0x34 + parm,val);
+							Instr3(DDFD(reg1),0x34 + parm,val);
                           	break;
 
 						default:
@@ -704,19 +811,22 @@ int DoCPUOpcode(int typ, int parm)
 			oldLine = linePtr;
 			token = GetWord(word);
 			if (token == '(')
-			{
+			{   // JP (HL/IX/IY)
 				if (parm >> 8 != 0xC3)
 					IllegalOperand();
 				else
 				{
-					GetWord(word);
-					reg1 = FindReg(word,regs);
-					RParen();
+                    reg1 = GetReg(regs);
+					if (RParen()) break;
 					switch(reg1)
 					{
+                        case reg_EOL:
+                            break;
+
 						case reg_HL: Instr1(0xE9);      break;
 						case reg_IX: Instr2(0xDD,0xE9); break;
 						case reg_IY: Instr2(0xFD,0xE9); break;
+
                      	default:
 							IllegalOperand();
 					}
@@ -733,7 +843,7 @@ int DoCPUOpcode(int typ, int parm)
 				}
 				else
 				{
-					Comma();
+					if (Comma()) return 1;
 					val = Eval();
 					Instr3W((parm & 255) + reg1*8,val);
              	}
@@ -748,108 +858,146 @@ int DoCPUOpcode(int typ, int parm)
 
 		case o_JR:
 			oldLine = linePtr;
-			GetWord(word);
-			reg1 = FindReg(word,conds);
-			if (reg1 == reg_None)
-			{
-				linePtr = oldLine;
-				val = EvalBranch(2);
-				Instr2(0x18,val);
-           	}
-			else if (reg1 >= 4)
-               IllegalOperand();
-			else
-			{
-				Comma();
-				val = EvalBranch(2);
-				Instr2(0x20 + reg1*8,val);
-           	}
+            switch((reg1 = GetReg(conds)))
+            {
+                case reg_EOL:
+                    break;
+
+                case reg_None:
+                    linePtr = oldLine;
+                    val = EvalBranch(2);
+                    Instr2(0x18,val);
+                    break;
+
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    if (Comma()) break;
+                    val = EvalBranch(2);
+                    Instr2(0x20 + reg1*8,val);
+                    break;
+
+                default:
+                    IllegalOperand();
+            }
 			break;
 
 		case o_RET:
-			GetWord(word);
-			reg1 = FindReg(word,conds);
-			if (reg1 == reg_None)	Instr1(0xC9);
-							else	Instr1(0xC0 + reg1*8);
+			if (GetWord(word) == 0) Instr1(0xC9);
+            else
+            {
+                reg1 = FindReg(word,conds);
+                if (reg1 < 0) IllegalOperand();
+                else          Instr1(0xC0 + reg1*8);
+            }
 			break;
 
 		case o_IN:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			if (IS_REG_BYTE(reg1))
+            switch((reg1 = GetReg(regs)))
 			{
-				Comma();
-				Expect("(");
-				oldLine = linePtr;
-				GetWord(word);
-				reg2 = FindReg(word,regs);
+                case reg_EOL:
+                    break;
 
-				if (reg1 == reg_A && reg2 == reg_None)
-				{
-					linePtr = oldLine;
-					val = Eval();
-					RParen();
-					Instr2(0xDB,val);
-				}
-				else if (reg2 == reg_C)
-				{
-					RParen();
-					Instr2(0xED,0x40 + reg1*8);
-            	}
-               	else IllegalOperand();
+                case reg_B:
+                case reg_C:
+                case reg_D:
+                case reg_E:
+                case reg_H:
+                case reg_L:
+                case reg_A:
+                    if (Comma()) break;
+                    if (Expect("(")) break;
+                    oldLine = linePtr;
+                    switch((reg2 = GetReg(regs)))
+					{
+                        case reg_EOL:
+                            break;
+
+                        case reg_None:
+                            if (reg1 != reg_A)
+                                IllegalOperand();
+                            else
+                            {
+                                linePtr = oldLine;
+                                val = Eval();
+                                if (RParen()) break;
+                                Instr2(0xDB,val);
+                            }
+                            break;
+
+                        case reg_C:
+                            if (RParen()) break;
+                            Instr2(0xED,0x40 + reg1*8);
+                            break;
+
+                        default:
+                            IllegalOperand();
+                    }
+                    break;
+
+                default:
+                    IllegalOperand();
            	}
-			else IllegalOperand();
 			break;
 
 		case o_OUT:
-			Expect("(");
+			if (Expect("(")) break;
 			oldLine = linePtr;
-			GetWord(word);
-			reg1 = FindReg(word,regs);
+            switch((reg1 = GetReg(regs)))
+			{
+                case reg_EOL:
+                    break;
 
-			if (reg1 == reg_None)
-			{
-				linePtr = oldLine;
-				val = Eval();
-				RParen();
-				Comma();
-				Expect("A");
-				Instr2(0xD3,val);
-			}
-			else if (reg1 == reg_C)
-			{
-				RParen();
-				Comma();
-				GetWord(word);
-				reg2 = FindReg(word,regs);
-				if (IS_REG_BYTE(reg2))	Instr2(0xED,0x41 + reg2*8);
-               	else					IllegalOperand();
-           	}
-            else IllegalOperand();
+                case reg_None:
+                    linePtr = oldLine;
+                    val = Eval();
+                    if (RParen()) break;
+                    if (Comma()) break;
+                    if (Expect("A")) break;
+                    Instr2(0xD3,val);
+                    break;
+
+                case reg_C:
+                    if (RParen()) break;
+                    if (Comma()) break;
+                    switch((reg2 = GetReg(regs)))
+					{
+                        case reg_EOL:
+                            break;
+
+                        case reg_B:
+                        case reg_C:
+                        case reg_D:
+                        case reg_E:
+                        case reg_H:
+                        case reg_L:
+                        case reg_A:
+                            Instr2(0xED,0x41 + reg2*8);
+                            break;
+
+                        default:
+                            IllegalOperand();
+                    }
+                    break;
+
+                default:
+                    IllegalOperand();
+            }
 			break;
 
 		case o_PushPop:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_BC:
 				case reg_DE:
-				case reg_HL:
-					Instr1(parm + (reg1-reg_BC)*16);
-					break;
-
-				case reg_AF:
-					Instr1(parm + 0x30);
-					break;
-
-				case reg_IX:
-					Instr2(0xDD,parm + 0x20);
-					break;
-
-				case reg_IY:
-					Instr2(0xFD,parm + 0x20);
-					break;
+				case reg_HL: Instr1(parm + (reg1-reg_BC)*16); break;
+				case reg_AF: Instr1(parm + 0x30);             break;
+				case reg_IX: Instr2(0xDD,parm + 0x20);        break;
+				case reg_IY: Instr2(0xFD,parm + 0x20);        break;
 
               	default:
 					IllegalOperand();
@@ -861,10 +1009,11 @@ int DoCPUOpcode(int typ, int parm)
 			break;
 
 		case o_Rotate:
-			GetWord(word);
-			reg1 = FindReg(word,regs);
-			switch(reg1)
+            switch((reg1 = GetReg(regs)))
 			{
+                case reg_EOL:
+                    break;
+
 				case reg_B:
 				case reg_C:
 				case reg_D:
@@ -876,20 +1025,20 @@ int DoCPUOpcode(int typ, int parm)
 					break;
 
 				case reg_Paren:
-					GetWord(word);
-					reg1 = FindReg(word,regs);
-					switch(reg1)
-					{
+                    switch((reg1 = GetReg(regs)))
+                    {
+                        case reg_EOL:
+                            break;
+
 						case reg_HL:
-							RParen();
+							if (RParen()) break;
 							Instr2(0xCB,parm+reg_M);
 							break;
 
 						case reg_IX:
 						case reg_IY:
 							val = IXOffset();
-							if (reg1 == reg_IX)	Instr4(0xDD,0xCB,val,parm+reg_M);
-							else				Instr4(0xFD,0xCB,val,parm+reg_M);
+							Instr4(DDFD(reg1),0xCB,val,parm+reg_M);
 							break;
 
 						default:
@@ -926,7 +1075,7 @@ int DoCPUOpcode(int typ, int parm)
 			val = Eval();
 			if (0 <= val && val <= 7)
 				Instr1(0xC7 + val*8);
-			else if ((val & 0xC7) == 0)	// [$08,$10,$18,$20,$28,$30,$38]
+			else if ((val & 0xC7) == 0)	// [$00,$08,$10,$18,$20,$28,$30,$38]
 				Instr1(0xC7 + val);
             else
             {
@@ -991,16 +1140,13 @@ int DoCPULabelOp(int typ, int parm, char *labl)
                 if (token != ',')           // validate that comma is present
                 {
                     Error("\",\" expected");
-                    return 1;
+                    break;
                 }
-                if (GetWord(word) == 0)     // validate that register is present
+                switch((reg2 = GetReg(regs)))
                 {
-                    MissingOperand();
-                    return 1;
-                }
-                reg2 = FindReg(word,regs);
-                switch(reg2)
-                {
+                    case reg_EOL:
+                        break;
+
                     case reg_B:
                     case reg_C:
                     case reg_D:
@@ -1012,20 +1158,20 @@ int DoCPULabelOp(int typ, int parm, char *labl)
                         break;
 
                     case reg_Paren:		// BIT n,(HL)
-                        GetWord(word);
-                        reg2 = FindReg(word,regs);
-                        switch(reg2)
+                        switch((reg2 = GetReg(regs)))
                         {
+                            case reg_EOL:
+                                break;
+
                             case reg_HL:
-                                RParen();
+                                if (RParen()) break;
                                 Instr2(0xCB,parm + reg1*8 + reg_M);
                                 break;
 
                             case reg_IX:
                             case reg_IY:
                                 val = IXOffset();
-                                if (reg2 == reg_IX)	Instr4(0xDD,0xCB,val,parm + reg1*8 + reg_M);
-                                else				Instr4(0xFD,0xCB,val,parm + reg1*8 + reg_M);
+                                Instr4(DDFD(reg2),0xCB,val,parm + reg1*8 + reg_M);
                                 break;
 
                             default:

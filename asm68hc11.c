@@ -1,4 +1,4 @@
-// asm68HC11.c - copyright 1998-2005 Bruce Tomlin
+// asm68HC11.c - copyright 1998-2006 Bruce Tomlin
 
 //#define DEBUG_PASS
 
@@ -178,7 +178,7 @@ struct OpcdRec opcdTab[] =
 	{"ORAB",  o_Arith,    0xCA},
 	{"ADDB",  o_Arith,    0xCB},
 	{"LDD",   o_LArith_01,0xCC}, // 68HC11 6801 6303
-	{"STD",   o_LArith_01,0xDD}, // 68HC11 6801 6803
+	{"STD",   o_LArith_01,0xDD}, // 68HC11 6801 6303
 	{"LDX",   o_LArith,   0xCE},
 	{"STX",   o_Arith,    0xDF},
 	{"CPD",   o_LArith_11,0x1A83}, // 68HC11
@@ -286,8 +286,7 @@ int DoCPUOpcode(int typ, int parm)
 				parm = 0x18;
 			else if (typ == o_Inherent_11 && cpu != cpu_68HC11) return 0;
 		case o_Inherent:
-			if ((parm & 0xF0FF) == 0xA0E0)	XInstr3W(0x3504,parm);
-									else	XInstr1(parm);
+			XInstr1(parm);
 			break;
 
 		case o_Relative:
@@ -410,7 +409,7 @@ int DoCPUOpcode(int typ, int parm)
 
 		case o_Bit_03:
 			if (cpu != cpu_6303) return 0;
-			// need to implement AIM/OIM/EIM/TIM
+			// AIM/OIM/EIM/TIM
 			// opcode #,ofs,X (3 bytes)
 			// opcode #,dir  (3 bytes)
 

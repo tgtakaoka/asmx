@@ -1,4 +1,4 @@
-// asm1802.c
+// asm1802.c - copyright 1998-2006 Bruce Tomlin
 
 #include <stdio.h>
 #include <ctype.h>

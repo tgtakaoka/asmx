@@ -1,4 +1,4 @@
-ASMX semi-generic 8-bit assembler
+ASMX semi-generic 8-bit assembler
 
  - - -
 
@@ -287,6 +287,18 @@ DB / FCB / BYTE / .BYTE / DC.B
   represent a tab ("\t"), linefeed ("\n"), or carriage return ("\r")
   character.  Hex escapes ("\xFF") are also supported.
 
+ZSCII
+
+  Creates a compressed text string as per the version 1 Infocom format,
+  using only the 0x04 and 0x05 shift codes.  (The 0x03 and 0x04 shift
+  codes may be optionally supported in a future version.)  Otherwise,
+  this works exactly like the DB pseudo-op.
+
+  WARNING: using a forward-referenced value could cause phase errors!
+
+  See http://www.wolldingwacht.de/if/z-spec.html for more information
+  on the compressed text format.
+
 DW / FDB / WORD / .WORD / DC.W
 
   Defines one or more constant 16-bit words in the code, using the
@@ -399,12 +411,21 @@ SEG / RSEG / SEG.U segment
 
   RSEG is for compatibility with vintage Atari 7800 source code.
 
-LIST ON / LIST OFF / LIST MACRO / LIST NOMACRO
-OPT LIST / OPT NOLIST / OPT MACRO / OPT NOMACRO
+LIST / OPT
 
-  These set assembler options.  Currently, the only options are to
-  turn listing on and off, and to turn listing of macro expansion
-  on and off.  The default is listing on, macro expansion off.
+  These set assembler options.  Currently, the options are:
+
+    LIST ON / OPT LIST            Turn on listing
+    LIST OFF / OPT NOLIST         Turn off listing
+    LIST MACRO / OPT MACRO        Turn on macro expansion in listing
+    LIST NOMACRO / OPT NOMACRO    Turn off macro expansion in listing
+    LIST EXPAND / OPT EXPAND      Turn on data expansion in listing
+    LIST NOEXPAND / OPT NOEXPAND  Turn off data expansion in listing
+    LIST SYM / OPT SYM            Turn on symbol table in listing
+    LIST NOSYM / OPT NOSYM        Turn off symbol table in listing
+
+  The default is listing on, macro expansion off, data expansion on,
+  symbol table on.
 
 SUB / SUBROUTINE name
 
@@ -873,32 +894,60 @@ Version 1.7.2 changes (2005-08-21)
 
 Version 1.7.3 changes (2006-01-23)
 
-* Added "\0".."\9" macro parameter substitution as per the ASnn series of assemblers
-  at http://www.kingswood-consulting.co.uk/assemblers/.  Even though it seems a bit
-  silly to have more than one way to access macro parameters, this does provide a way
-  to get the number of macro parameters, and to generate unique labels inside a macro.
+* Added "\0".."\9" macro parameter substitution as per the ASnn series of
+  assemblers at http://www.kingswood-consulting.co.uk/assemblers/.  Even though
+  it seems a bit silly to have more than one way to access macro parameters,
+  this does provide a way to get the number of macro parameters, and to generate
+  unique labels inside a macro.
 
   \0 = number of macro parameters
   \1..\9 = nth macro parameter
   \? = unique ID per macro invocation (padded with leading zeros to five digits)
 
-* 6809 SETDP pseudo-op was broken by the opcode table rearrangement in 1.7.2.  It
-  has been fixed.
+* 6809 SETDP pseudo-op was broken by the opcode table rearrangement in 1.7.2.
+  It has been fixed.
 
 * Added the ":=" pseudo-op as an alias for the "SET" pseudo-op.
 
 * Multi-level nested macros have been implemented.
 
-* The "SET" pseudo-op now works properly for Z-80.  The SET opcode was hiding access
-  to the pseudo-op, though other variations (".SET" and ":=") would still work.  This
-  fix is tricky enough that there may be some wierd side-effects in error situations.
-  Some bugs with Z-80 SET opcode error handling were fixed as well.
+* The "SET" pseudo-op now works properly for Z-80.  The SET opcode was hiding
+  access to the pseudo-op, though other variations (".SET" and ":=") would still
+  work.  This fix is tricky enough that there may be some wierd side-effects in
+  error situations.  Some bugs with Z-80 SET opcode error handling were fixed as
+  well.
 
 * Added backslash hex escapes ("\xFF") for strings in DB pseudo-op.
 
 * "Short branch out of range" was changed from a warning to an error.
 
 * Added an 8051 assembler back-end.
+
+ - - -
+
+Version 1.7.4 changes (2006-11-09)
+
+* Updated Z-80 assembler with improved parsing techniques from the 8051
+  assembler.
+
+* In Z-80 assembler, "LD BC,(foo - 1) * 256" wouldn't assemble properly.
+
+* Added ZSCII pseudo-op to generate Infocom-style compressed text strings
+  in the version 1 format.  (versions 2 and later use a dictionary table
+  which is impractical to supply or generate)
+
+* Fixed a bug that caused long DB, DW, etc. statements to list most of their
+  lines in a macro when macro listing was turned off.
+
+* Fixed a bug that could cause a negative result to appear as "FFFF" in the
+  listing for the EQU and RORG pseudo-ops.
+
+* Added LIST SYM / LIST NOSYM to disable symbol table in listing file.
+
+* Added "FLAG.BIT" format to EQU / SET pseudo-op in 8051 assembler.
+
+* ELSIF pseudo-op would cause a "Too many operands" error if its matching IF
+  expression evaluated to true.
 
  - - -
 
@@ -912,8 +961,30 @@ To do:
 
 * Linkable/relocatable object code files (long term 3.0 goal).
 
+* 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
+
  - - -
 
 BUGS:
 
-(none currently known)
+(currently known)
+
+* need to allow label on ENDM line
+
+STRING  MACRO   str
+        DB      X\? - . - 1
+        DB      str
+X\?
+        ENDM
+
+* label in macro that ends up all numeric
+
+STR_YX  MACRO   y,x,str
+        DB      X\? - . - 3, yy, xx
+        DB      str
+X\?
+	ENDM
+
+* single-quote needs backslash support
+
+'\n' '\r' '\t' '\\'

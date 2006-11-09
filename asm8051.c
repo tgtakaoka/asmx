@@ -1,4 +1,4 @@
-// asm8051.c
+// asm8051.c - copyright 1998-2006 Bruce Tomlin
 
 #include <stdio.h>
 #include <ctype.h>
@@ -128,11 +128,14 @@ int FindReg(const char *regName, const char *regList)
     {
         p = regName;
         // compare words
-        while (*p && *p == *regList++)
+        while (*p && *p == *regList)
+        {
+            regList++;
             p++;
+        }
 
         // if not match, skip rest of word
-        if (*p)
+        if (*p || (*regList != 0 && *regList != ' '))
         {
             // skip to next whitespace
             while (*regList && *regList != ' ')
@@ -177,15 +180,25 @@ int EvalBitReg()
     oldLine = linePtr;
     if (GetWord(word) == '.')
     {
+        // bit number must be 0..7
         val2 = Eval();
+        if (val2 < 0 || val2 > 7)
+        {
+            IllegalOperand();
+            return -1;
+        }
+
+        // compute bit index for each range
         if (0x20 <= val1 && val1 <= 0x2F)
             return (val1 & 0x1F) * 8 + val2;
         if ((val1 & 0x87) == 0x80)
             return (val1 & 0xF8) + val2;
+
         IllegalOperand();
         return -1;
     }
 
+    // resulting bit index must be 0..255
     linePtr = oldLine;
     if (val1 & 0xFFFFFF00)
     {
@@ -915,11 +928,50 @@ int DoCPUOpcode(int typ, int parm)
 
 int DoCPULabelOp(int typ, int parm, char *labl)
 {
-//	int		i,val;
-//	Str255  word;
+	int		i,val,val2;
+    char    *oldLine;
+	Str255  word;
 
 	switch(typ)
 	{
+		case o_EQU:
+			if (labl[0] == 0)
+				Error("Missing label");
+			else
+			{
+				val = Eval();
+
+                // allow EQU to 8051 register bit references
+                oldLine = linePtr;
+                if (GetWord(word) == '.')
+                {
+                    // bit number must be 0..7
+                    val2 = Eval();
+                    if (val2 < 0 || val2 > 7)
+                    {
+                        IllegalOperand();
+                        break;
+                    }
+
+                    // compute bit index for each range
+                    if (0x20 <= val && val <= 0x2F)
+                        val = (val & 0x1F) * 8 + val2;
+                    else if ((val & 0x87) == 0x80)
+                        val = (val & 0xF8) + val2;
+                    else
+                    {
+                        IllegalOperand();
+                        break;
+                    }
+                }
+
+				sprintf(word,"---- = %.4X",val & 0xFFFF);
+				for (i=5; i<11; i++)
+					listLine[i] = word[i];
+				DefSym(labl,val,parm==1,parm==0);
+			}
+			break;
+
 		default:
 			return 0;
 			break;

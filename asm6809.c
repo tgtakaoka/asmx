@@ -1,4 +1,4 @@
-// asm6809.c - copyright 1998-2005 Bruce Tomlin
+// asm6809.c - copyright 1998-2006 Bruce Tomlin
 
 //#define DEBUG_PASS
 
@@ -438,7 +438,11 @@ void DoIndex(int idxOp, int dirOp, int extOp)
 					if (!indirect && (dirOp >= 0 || extOp >= 0))
 					{
 						if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == dpReg) || force == '<') && dirOp >= 0)
+                        {
+//                          if ((val & 0xFF00) >> 8 != 0 && (val & 0xFF00) >> 8 != dpReg && force == '<')
+//                              Warning("High byte of operand does not match SETDP value");
 							XInstr2(dirOp, val);	// <$xx
+                        }
 						else
 							XInstr3W(extOp, val);   // >$xxxx
 					}
@@ -611,7 +615,7 @@ int DoCPUOpcode(int typ, int parm)
 			else
 			{
 				linePtr = oldLine;
-				DoIndex(parm & ~0x10 | 0x20, parm & ~0x10 | 0x10, parm & ~0x10 | 0x30);
+				DoIndex((parm & ~0x10) | 0x20, (parm & ~0x10) | 0x10, (parm & ~0x10) | 0x30);
 			}
 			break;
 
