@@ -1,15 +1,7 @@
-// asm1802.c - copyright 1998-2006 Bruce Tomlin
-
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+// asm1802.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "RCA 1802 assembler"
-#define INSTR_MAX   3		// length of longest valid instruction
-#define CPU_BIG_ENDIAN		// CPU is big-endian
-
+#define THREE_TAB   // use three-tab data area in listings
 #include "asmguts.h"
 
 enum
@@ -115,21 +107,21 @@ struct OpcdRec opcdTab[] =
     {"SHL", o_None,     0xFE},
     {"SMI", o_Immediate,0xFF},
 
-	{"",	o_Illegal,  0}
+    {"",    o_Illegal,  0}
 };
 
 
 // --------------------------------------------------------------
 
 
-int GetReg(void)
+int Get_1802_Reg(void)
 {
-	Str255  word;
-	int		token;
-	char	*oldLine;
+    Str255  word;
+    int     token;
+    char    *oldLine;
 
-	oldLine = linePtr;
-	token = GetWord(word);
+    oldLine = linePtr;
+    token = GetWord(word);
 
     if (word[0]=='R')
     {
@@ -146,88 +138,80 @@ int GetReg(void)
 
     // otherwise evaluate an expression
     linePtr = oldLine;
-	return Eval();
+    return Eval();
 }
 
 
 int DoCPUOpcode(int typ, int parm)
 {
-	int		val;
-//	Str255	word;
-//	char	*oldLine;
-//	int		token;
+    int     val;
+//  Str255  word;
+//  char    *oldLine;
+//  int     token;
 
-	switch(typ)
-	{
+    switch(typ)
+    {
 
-		case o_None:
-			Instr1(parm);
-			break;
+        case o_None:
+            InstrB(parm);
+            break;
 
-		case o_Register:
-			val = GetReg();
-			if (val < 0 || val > 15)
-				IllegalOperand();
-			else if (val == 0 && parm == 0x00)
+        case o_Register:
+            val = Get_1802_Reg();
+            if (val < 0 || val > 15)
+                IllegalOperand();
+            else if (val == 0 && parm == 0x00)
                 IllegalOperand();   // don't allow LDN R0
             else
-				Instr1(parm+val);
-			break;
+                InstrB(parm+val);
+            break;
 
-		case o_Immediate:
-			val = EvalByte();
-			Instr2(parm,val);
-			break;
+        case o_Immediate:
+            val = EvalByte();
+            InstrBB(parm,val);
+            break;
 
         case o_Branch:
-			val = Eval();
+            val = Eval();
             // branch must go to same page as second byte of instruction
             if (((locPtr + 1) & 0xFF00) != (val & 0xFF00))
                 Error("Branch out of range");
-			Instr2(parm,val);
+            InstrBB(parm,val);
             break;
 
         case o_LBranch:
-			val = Eval();
-			Instr3W(parm,val);
-			break;
-
-        case o_INPOUT:
-			val = Eval();
-			if (val < 1 || val > 7)
-				IllegalOperand();
-            else
-				Instr1(parm+val);
+            val = Eval();
+            InstrBW(parm,val);
             break;
 
-		default:
-			return 0;
-			break;
-	}
+        case o_INPOUT:
+            val = Eval();
+            if (val < 1 || val > 7)
+                IllegalOperand();
+            else
+                InstrB(parm+val);
+            break;
+
+        default:
+            return 0;
+            break;
+    }
     return 1;
 }
 
 
 int DoCPULabelOp(int typ, int parm, char *labl)
 {
-//	int		i,val;
-//	Str255  word;
+//  int     i,val;
+//  Str255  word;
 
-	switch(typ)
-	{
-		default:
-			return 0;
-			break;
-	}
+    switch(typ)
+    {
+        default:
+            return 0;
+            break;
+    }
     return 1;
-}
-
-
-void usage(void)
-{
-	stdversion();
-	stdusage();
-	exit(1);
 }
 
 
@@ -238,4 +222,5 @@ void PassInit(void)
 
 void AsmInit(void)
 {
+    endian = BIG_END;
 }

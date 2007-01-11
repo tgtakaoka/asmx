@@ -1,4 +1,4 @@
-ASMX semi-generic 8-bit assembler
+ASMX semi-generic assembler
 
  - - -
 
@@ -951,6 +951,66 @@ Version 1.7.4 changes (2006-11-09)
 
  - - -
 
+Version 1.8 changes (2007-01-11)
+
+* made changes to allow for unified assembler
+  * got rid of instr[] vs bytStr[] distinction and INSTR_MAX
+  * new common error calls: BadMode() MissingOperand()
+  * InstrFoo() calls renamed to be a bit more descriptive (Instr5W -> InstrBBBW, etc.)
+  * made endian a variable, not a #define
+  * removed usage() from invidivual assemblers
+  * NUKED HARD TABS in C source code
+  * updated other assemblers to use FindReg/GetReg from Z80
+  * listing files now use eight more columns for hex data, and with new InstrFoo() calls,
+    spaces can now be put between opcodes and operands in hex data
+  * common assembler code is now mostly 32-bit clean
+
+* added a 68000 assembler. 68010-only instructions can be enabled with a #define, except
+  BKPT was left enabled because it is still semi-valid for 68000/68008
+
+* 68HC16 referred to PSHM as "PUSHM" in a few places
+
+* 68HC16 was mis-assembling ANDP and ORP as 8-bit immediate instructions
+
+* 8051 was mis-assembling ORL/ANL/XRL dir,#imm instructions
+
+* 8051 was mis-assembling ORL/ANL/XRL dir,A instructions
+
+* added new ASCIIC pseudo-op for counted-length (Pascal-style) strings
+
+* single-quoted character constants can now use the same backslash escapes as
+  the double-quoted strings in the DB pesudo-op
+
+* added support for "three-tab" listing format with hex data in 24 columns
+  which puts blanks between parts of instructions
+
+* added support for 32-bit addresses and symbols in listings (requires three-tab)
+
+* symbols can now start with a $ if you set a #define, but this prevents
+  hexadecimal constants starting with a $ from working
+
+* single-quoted constants are no longer limited to two bytes
+
+* CR-terminated source files would do bad things
+
+* object code output for Intel hex records now supports 32-bit addresses using record
+  types 04 and 05
+
+* object code output for Motorola S9 records now supports 32-bit addresses using new
+  "-s##" command line option, where ## is the type of file: 9, 19, 28, or 37.  The number
+  is used for the file name of the object code output file.  9 and 19 are identical except
+  for the name of the object code output file.
+
+* fixed a really subtle bug that would cause ALIGN/EVEN to use up bytes when they weren't
+  supposed to (this bug dates back to the first appearance of ALIGN!)
+
+* DS pseudo-op no longer allows forward-declared lengths, which cause phase errors
+
+* DC.W and DC.L now suport text strings with null padding alignment after every string literal.
+  Note that alignment is internal-only, and any alignment error at the start will be preserved.
+
+ - - -
+
 To do:
 
 * Implement REP (or REPEAT) pseudo-op (currently under construction).
@@ -963,28 +1023,15 @@ To do:
 
 * 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
 
+* need to allow label on ENDM line:
+
+  STRING  MACRO   str
+          DB      X\? - . - 1
+          DB      str
+  X\?     ENDM
+
  - - -
 
 BUGS:
 
-(currently known)
-
-* need to allow label on ENDM line
-
-STRING  MACRO   str
-        DB      X\? - . - 1
-        DB      str
-X\?
-        ENDM
-
-* label in macro that ends up all numeric
-
-STR_YX  MACRO   y,x,str
-        DB      X\? - . - 3, yy, xx
-        DB      str
-X\?
-	ENDM
-
-* single-quote needs backslash support
-
-'\n' '\r' '\t' '\\'
+(none currently known)

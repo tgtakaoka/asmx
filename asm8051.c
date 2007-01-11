@@ -1,15 +1,7 @@
-// asm8051.c - copyright 1998-2006 Bruce Tomlin
-
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+// asm8051.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "8051 assembler"
-#define INSTR_MAX   3		// length of longest valid instruction
-#define CPU_LITTLE_ENDIAN   // CPU is little-endian
-
+#define THREE_TAB   // use three-tab data area in listings
 #include "asmguts.h"
 
 enum instrType
@@ -111,48 +103,14 @@ struct OpcdRec opcdTab[] =
 
     {"XCH",  o_XCH,  0x00},
 
-	{"",	o_Illegal,  0}
+    {"",    o_Illegal,  0}
 };
 
 
 // --------------------------------------------------------------
 
 
-int FindReg(const char *regName, const char *regList)
-{
-    const char *p;
-    int i;
-
-    i = 0;
-    while (*regList)
-    {
-        p = regName;
-        // compare words
-        while (*p && *p == *regList)
-        {
-            regList++;
-            p++;
-        }
-
-        // if not match, skip rest of word
-        if (*p || (*regList != 0 && *regList != ' '))
-        {
-            // skip to next whitespace
-            while (*regList && *regList != ' ')
-                regList++;
-            // skip to next word
-            while (*regList == ' ')
-                regList++;
-            i++;
-        }
-        else return i;
-    }
-
-    return -1;
-}
-
-
-int GetReg(const char *regList)
+int Get_8051_Reg(const char *regList)
 {
     Str255  word;
     int     token;
@@ -163,6 +121,7 @@ int GetReg(const char *regList)
         return -2;
     }
 
+    // 8051 needs to handle '@' symbols as part of a register name
     if (token == '@')
         GetWord(word+1);
 
@@ -210,50 +169,50 @@ int EvalBitReg()
 
 int DoCPUOpcode(int typ, int parm)
 {
-	int		val;
-	int		reg1;
-	int		reg2;
-	Str255	word;
-	char	*oldLine;
-	int		token;
+    int     val;
+    int     reg1;
+    int     reg2;
+    Str255  word;
+    char    *oldLine;
+    int     token;
 
-	switch(typ)
-	{
+    switch(typ)
+    {
         case o_None:
-			Instr1(parm);
-			break;
+            InstrB(parm);
+            break;
 
         case o_AJMP:
-			val = Eval();
+            val = Eval();
             if ((val & 0xF800) != ((locPtr + 2) & 0xF800))
             {
                 if (parm == 0x01) Warning("AJMP out of range");
                              else Warning("ACALL out of range");
             }
-            Instr2(parm + ((val & 0x0700) >> 3),val & 0xFF);
+            InstrBB(parm + ((val & 0x0700) >> 3),val & 0xFF);
             break;
 
-		case o_LJMP:
-			val = Eval();
-			Instr3W(parm,val);
-			break;
+        case o_LJMP:
+            val = Eval();
+            InstrBW(parm,val);
+            break;
 
-		case o_Rel:
-			val = EvalBranch(2);
-			Instr2(parm,val);
-			break;
+        case o_Rel:
+            val = EvalBranch(2);
+            InstrBB(parm,val);
+            break;
 
         case o_BitRel:
             reg1 = EvalBitReg();
             if (reg1 < 0) break;
             Comma();
-			val = EvalBranch(3);
-			Instr3(parm,reg1,val);
+            val = EvalBranch(3);
+            InstrBBB(parm,reg1,val);
             break;
 
         case o_DJNZ:
             oldLine = linePtr;
-            switch((reg1 = GetReg("R0 R1 R2 R3 R4 R5 R6 R7")))
+            switch((reg1 = Get_8051_Reg("R0 R1 R2 R3 R4 R5 R6 R7")))
             {
                 case 0:
                 case 1:
@@ -265,7 +224,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 7:
                     Comma();
                     val = EvalBranch(2);
-                    Instr2(0xD8+reg1,val);
+                    InstrBB(0xD8+reg1,val);
                     break;
 
                 case -1:
@@ -273,7 +232,7 @@ int DoCPUOpcode(int typ, int parm)
                     reg1 = EvalByte();
                     Comma();
                     val = EvalBranch(3);
-                    Instr3(0xD5,reg1,val);
+                    InstrBBB(0xD5,reg1,val);
                     break;
 
                 default:
@@ -283,7 +242,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_Arith:
-            switch(GetReg("A"))
+            switch(Get_8051_Reg("A"))
             {
                 default:
                 case -1:
@@ -294,7 +253,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 0:
                     Comma();
                     oldLine = linePtr;
-                    switch((reg1 = GetReg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 #")))
+                    switch((reg1 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 #")))
                     {
                         default:
                             IllegalOperand();
@@ -304,7 +263,7 @@ int DoCPUOpcode(int typ, int parm)
                         case -1:    // dir
                             linePtr = oldLine;
                             val = EvalByte();
-                            Instr2(parm + 0x05, val);
+                            InstrBB(parm + 0x05, val);
                             break;
 
                         case 0:     // @Rn
@@ -317,12 +276,12 @@ int DoCPUOpcode(int typ, int parm)
                         case 7:
                         case 8:
                         case 9:
-                            Instr1(parm + 0x06 + reg1);
+                            InstrB(parm + 0x06 + reg1);
                             break;
 
                         case 10:    // #imm
                             val = EvalByte();
-                            Instr2(parm + 0x04, val);
+                            InstrBB(parm + 0x04, val);
                             break;
                     }
                     break;
@@ -331,7 +290,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_Logical:
             oldLine = linePtr;
-            switch ((GetReg("A C")))
+            switch ((Get_8051_Reg("A C")))
             {
                 default:
                     IllegalOperand();
@@ -343,7 +302,7 @@ int DoCPUOpcode(int typ, int parm)
                     val = EvalByte();
 
                     Comma();
-                    switch (GetReg("A #"))
+                    switch (Get_8051_Reg("A #"))
                     {
                         default:
                         case -1:
@@ -351,13 +310,14 @@ int DoCPUOpcode(int typ, int parm)
                         case -2:
                             break;
 
-                        case 0:     // A
-                            Instr1((parm & 0xFF) + 0x02);
+                        case 0:     // dir,A
+                            InstrBB((parm & 0xFF) + 0x02, val);
                             break;
 
-                        case 1:     // #imm
+                        case 1:     // dir,#imm
+                            reg1 = val;
                             val = EvalByte();
-                            Instr2((parm & 0xFF) + 0x03, val);
+                            InstrBBB((parm & 0xFF) + 0x03, reg1, val);
                             break;
                     }
                     break;
@@ -365,7 +325,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 0:     // A
                     Comma();
                     oldLine = linePtr;
-                    switch((reg1 = GetReg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 #")))
+                    switch((reg1 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 #")))
                     {
                         default:
                             IllegalOperand();
@@ -375,7 +335,7 @@ int DoCPUOpcode(int typ, int parm)
                         case -1:    // dir
                             linePtr = oldLine;
                             val = EvalByte();
-                            Instr2((parm & 0xFF) + 0x05, val);
+                            InstrBB((parm & 0xFF) + 0x05, val);
                             break;
 
                         case 0:     // @Rn
@@ -388,12 +348,12 @@ int DoCPUOpcode(int typ, int parm)
                         case 7:
                         case 8:
                         case 9:
-                            Instr1((parm & 0xFF) + 0x06 + reg1);
+                            InstrB((parm & 0xFF) + 0x06 + reg1);
                             break;
 
                         case 10:    // #imm
                             val = EvalByte();
-                            Instr2((parm & 0xFF) + 0x04, val);
+                            InstrBB((parm & 0xFF) + 0x04, val);
                             break;
                     }
                     break;
@@ -414,7 +374,7 @@ int DoCPUOpcode(int typ, int parm)
 
                     reg1 = EvalBitReg();
                     if (reg1 < 0) break;
-                    Instr2((parm >> 8) + val, reg1);
+                    InstrBB((parm >> 8) + val, reg1);
                     break;
 
 
@@ -422,7 +382,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_AccA:
-            switch(GetReg("A"))
+            switch(Get_8051_Reg("A"))
             {
                 default:
                 case -1:
@@ -430,12 +390,12 @@ int DoCPUOpcode(int typ, int parm)
                 case -2:
                     break;
                 case 0:
-                    Instr1(parm);
+                    InstrB(parm);
             }
             break;
 
         case o_AccAB:
-            switch(GetReg("AB"))
+            switch(Get_8051_Reg("AB"))
             {
                 default:
                 case -1:
@@ -443,13 +403,13 @@ int DoCPUOpcode(int typ, int parm)
                 case -2:
                     break;
                 case 0:
-                    Instr1(parm);
+                    InstrB(parm);
             }
             break;
 
         case o_MOV:
             oldLine = linePtr;
-            switch((reg1 = GetReg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 A C DPTR")))
+            switch((reg1 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 A C DPTR")))
             {
                 case -2:    // EOL
                     break;
@@ -476,7 +436,7 @@ int DoCPUOpcode(int typ, int parm)
                             break;
                         }
                         Comma();
-                        switch (GetReg("C"))
+                        switch (Get_8051_Reg("C"))
                         {
                             default:
                             case -1:
@@ -485,7 +445,7 @@ int DoCPUOpcode(int typ, int parm)
                                 break;
 
                             case 0:
-                                Instr2(0x92,reg1 + reg2);
+                                InstrBB(0x92,reg1 + reg2);
                         }
                         break;
                     }
@@ -496,7 +456,7 @@ int DoCPUOpcode(int typ, int parm)
                         break;
                     }
                     oldLine = linePtr;  // dir,Rn or bit,C
-                    switch((reg2 = GetReg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 A # C")))
+                    switch((reg2 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 A # C")))
                     {
                         default:
                             IllegalOperand();
@@ -506,7 +466,7 @@ int DoCPUOpcode(int typ, int parm)
                         case -1:    // dir
                             linePtr = oldLine;
                             val = EvalByte();
-                            Instr3(0x85, val, reg1);
+                            InstrBBB(0x85, val, reg1);
                             break;
 
                         case 0:     // @Rn
@@ -519,20 +479,20 @@ int DoCPUOpcode(int typ, int parm)
                         case 7:
                         case 8:
                         case 9:
-                            Instr2(0x86 + reg2, reg1);
+                            InstrBB(0x86 + reg2, reg1);
                             break;
 
                         case 10:    // A
-                            Instr2(0xF5, reg1);
+                            InstrBB(0xF5, reg1);
                             break;
 
                         case 11:    // #imm
                             val = EvalByte();
-                            Instr3(0x75, reg1, val);
+                            InstrBBB(0x75, reg1, val);
                             break;
 
                         case 12:    // bit,C
-                            Instr2(0x92,reg1);
+                            InstrBB(0x92,reg1);
                             break;
                     }
                     break;
@@ -549,7 +509,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 9:
                     Comma();
                     oldLine = linePtr;
-                    switch (GetReg("A #"))
+                    switch (Get_8051_Reg("A #"))
                     {
                         default:
                             IllegalOperand();
@@ -559,16 +519,16 @@ int DoCPUOpcode(int typ, int parm)
                         case -1:    // dir
                             linePtr = oldLine;
                             val = EvalByte();
-                            Instr2(0xA6 + reg1, val);
+                            InstrBB(0xA6 + reg1, val);
                             break;
 
                         case 0:     // A
-                            Instr1(0xF6 + reg1);
+                            InstrB(0xF6 + reg1);
                             break;
 
                         case 1:     // #imm
                             val = EvalByte();
-                            Instr2(0x76 + reg1, val);
+                            InstrBB(0x76 + reg1, val);
                             break;
                     }
                     break;
@@ -576,7 +536,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 10:     // A
                     Comma();
                     oldLine = linePtr;
-                    switch((reg1 = GetReg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 #")))
+                    switch((reg1 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 #")))
                     {
                         default:
                             IllegalOperand();
@@ -586,7 +546,7 @@ int DoCPUOpcode(int typ, int parm)
                         case -1:    // dir
                             linePtr = oldLine;
                             val = EvalByte();
-                            Instr2(0xE5, val);
+                            InstrBB(0xE5, val);
                             break;
 
                         case 0:     // @Rn
@@ -599,12 +559,12 @@ int DoCPUOpcode(int typ, int parm)
                         case 7:
                         case 8:
                         case 9:
-                            Instr1(0xE6 + reg1);
+                            InstrB(0xE6 + reg1);
                             break;
 
                         case 10:     // #imm
                             val = EvalByte();
-                            Instr2(0x74, val);
+                            InstrBB(0x74, val);
                             break;
                     }
                     break;
@@ -613,14 +573,14 @@ int DoCPUOpcode(int typ, int parm)
                     Comma();
                     reg1 = EvalBitReg();
                     if (reg1 < 0) break;
-                    Instr2(0xA2,reg1);
+                    InstrBB(0xA2,reg1);
                     break;
 
                 case 12:    // DPTR
                     Comma();
                     Expect("#");
                     val = Eval();
-                    Instr3W(0x90,val);
+                    InstrBW(0x90,val);
                     break;
 
                 default:
@@ -630,7 +590,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_INC_DEC:
             oldLine = linePtr;
-            switch((reg1 = GetReg("A DPTR @R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
+            switch((reg1 = Get_8051_Reg("A DPTR @R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
             {
                 case -2:    // EOL
                     break;
@@ -638,7 +598,7 @@ int DoCPUOpcode(int typ, int parm)
                 case -1:    // dir
                     linePtr = oldLine;
                     val = EvalByte();
-                    Instr2(parm + 0x05, val);
+                    InstrBB(parm + 0x05, val);
                     break;
 
                 case 0:     // A
@@ -652,11 +612,11 @@ int DoCPUOpcode(int typ, int parm)
                 case 9:
                 case 10:
                 case 11:
-                    Instr1((parm & 0xFF) + 0x04 + reg1);
+                    InstrB((parm & 0xFF) + 0x04 + reg1);
                     break;
 
                 case 1:     // DPTR
-                    if (parm & 0xFF00) Instr1(parm >> 8);
+                    if (parm & 0xFF00) InstrB(parm >> 8);
                                   else IllegalOperand();
                     break;
 
@@ -666,7 +626,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_XCHD:
-            switch(GetReg("A"))
+            switch(Get_8051_Reg("A"))
             {
                 default:
                 case -1:
@@ -675,7 +635,7 @@ int DoCPUOpcode(int typ, int parm)
                     break;
                 case 0:
                     Comma();
-                    switch((reg1 = GetReg("@R0 @R1")))
+                    switch((reg1 = Get_8051_Reg("@R0 @R1")))
                     {
                         default:
                         case -1:
@@ -684,38 +644,38 @@ int DoCPUOpcode(int typ, int parm)
                             break;
                         case 0:
                         case 1:
-                            Instr1(0xD6 + reg1);
+                            InstrB(0xD6 + reg1);
                             break;
                     }
                     break;
             }
             break;
 
-		case o_PushPop:
-			val = Eval();
-			Instr2(parm,val);
-			break;
+        case o_PushPop:
+            val = Eval();
+            InstrBB(parm,val);
+            break;
 
         case o_A_bit_C:
             oldLine = linePtr;
-            switch((reg1 = GetReg("A C")))
+            switch((reg1 = Get_8051_Reg("A C")))
             {
                 case 0:     // A
                     if ((parm & 0xFF00) == 0)
                         IllegalOperand();
                     else
-                        Instr1(parm >> 8);
+                        InstrB(parm >> 8);
                     break;
 
                 case 1:     // C
-                    Instr1((parm & 0xFF) + 1);
+                    InstrB((parm & 0xFF) + 1);
                     break;
 
                 case -1:    // bit
                     linePtr = oldLine;
                     reg1 = EvalBitReg();
                     if (reg1 < 0) break;
-                    Instr2(parm & 0xFF, reg1);
+                    InstrBB(parm & 0xFF, reg1);
                     break;
 
                 default:
@@ -724,7 +684,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_JMP:
-            switch (GetReg("@A"))
+            switch (Get_8051_Reg("@A"))
             {
                 default:
                 case -1:
@@ -734,7 +694,7 @@ int DoCPUOpcode(int typ, int parm)
 
                 case 0:
                     Expect("+");
-                    switch (GetReg("DPTR"))
+                    switch (Get_8051_Reg("DPTR"))
                     {
                         default:
                         case -1:
@@ -743,7 +703,7 @@ int DoCPUOpcode(int typ, int parm)
                             break;
 
                         case 0:
-                            Instr1(0x73);
+                            InstrB(0x73);
                             break;
                     }
                     break;
@@ -751,7 +711,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_MOVC:
-            switch (GetReg("A"))
+            switch (Get_8051_Reg("A"))
             {
                 default:
                 case -1:
@@ -761,7 +721,7 @@ int DoCPUOpcode(int typ, int parm)
 
                 case 0:
                     Comma();
-                    switch (GetReg("@A"))
+                    switch (Get_8051_Reg("@A"))
                     {
                         default:
                         case -1:
@@ -772,7 +732,7 @@ int DoCPUOpcode(int typ, int parm)
                         case 0:
                             Expect("+");
 
-                            switch (GetReg("PC DPTR"))
+                            switch (Get_8051_Reg("PC DPTR"))
                             {
                                 default:
                                 case -1:
@@ -781,10 +741,10 @@ int DoCPUOpcode(int typ, int parm)
                                     break;
 
                                 case 0:
-                                    Instr1(0x83);
+                                    InstrB(0x83);
                                     break;
                                 case 1:
-                                    Instr1(0x93);
+                                    InstrB(0x93);
                                     break;
                             }
                             break;
@@ -794,7 +754,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_MOVX:
-            switch ((reg1 = GetReg("@DPTR A @R0 @R1")))
+            switch ((reg1 = Get_8051_Reg("@DPTR A @R0 @R1")))
             {
                 default:
                 case -1:
@@ -804,7 +764,7 @@ int DoCPUOpcode(int typ, int parm)
 
                 case 1:     // A
                     Comma();
-                    switch ((reg1 = GetReg("@DPTR A @R0 @R1")))
+                    switch ((reg1 = Get_8051_Reg("@DPTR A @R0 @R1")))
                     {
                         case 1:     // A,A
                         default:
@@ -816,7 +776,7 @@ int DoCPUOpcode(int typ, int parm)
                         case 0:     // A,@DPTR
                         case 2:     // A,@R0
                         case 3:     // A,@R1
-                            Instr1(0xE0 + reg1);
+                            InstrB(0xE0 + reg1);
                             break;
                     }
                     break;
@@ -825,7 +785,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 2:     // @R0
                 case 3:     // @R1
                     Comma();
-                    switch (GetReg("A"))
+                    switch (Get_8051_Reg("A"))
                     {
                         default:
                         case -1:
@@ -835,21 +795,21 @@ int DoCPUOpcode(int typ, int parm)
                         case 0:
                             break;
                     }
-                    Instr1(0xF0 + reg1);
+                    InstrB(0xF0 + reg1);
                     break;
             }
             break;
 
         case o_CJNE:
             oldLine = linePtr;
-            switch((reg1 = GetReg("A A @R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
+            switch((reg1 = Get_8051_Reg("A A @R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
             {
                 case -1:
                     linePtr = oldLine;
                     reg1 = EvalByte();
                     Comma();
                     val = EvalBranch(3);
-                    Instr3(0xB5,reg1,val);
+                    InstrBBB(0xB5,reg1,val);
                     break;
 
                 case 0:     // A
@@ -868,7 +828,7 @@ int DoCPUOpcode(int typ, int parm)
                     reg2 = EvalByte();
                     Comma();
                     val = EvalBranch(3);
-                    Instr3(0xB4+reg1,reg2,val);
+                    InstrBBB(0xB4+reg1,reg2,val);
                     break;
 
                 default:
@@ -877,7 +837,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_XCH:
-            switch (GetReg("A"))
+            switch (Get_8051_Reg("A"))
             {
                 default:
                 case -1:
@@ -888,7 +848,7 @@ int DoCPUOpcode(int typ, int parm)
                 case 0:
                     Comma();
                     oldLine = linePtr;
-                    switch ((reg1 = GetReg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
+                    switch ((reg1 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
                     {
                         default:
                             IllegalOperand();
@@ -898,7 +858,7 @@ int DoCPUOpcode(int typ, int parm)
                         case -1:    // dir
                             linePtr = oldLine;
                             val = EvalByte();
-                            Instr2(0xC5, val);
+                            InstrBB(0xC5, val);
                             break;
 
                         case 0:     // @R0
@@ -911,35 +871,35 @@ int DoCPUOpcode(int typ, int parm)
                         case 7:
                         case 8:
                         case 9:
-                            Instr1(0xC6 + reg1);
+                            InstrB(0xC6 + reg1);
                             break;
                     }
                     break;
             }
             break;
 
-		default:
-			return 0;
-			break;
-	}
+        default:
+            return 0;
+            break;
+    }
     return 1;
 }
 
 
 int DoCPULabelOp(int typ, int parm, char *labl)
 {
-	int		i,val,val2;
+    int     i,val,val2;
     char    *oldLine;
-	Str255  word;
+    Str255  word;
 
-	switch(typ)
-	{
-		case o_EQU:
-			if (labl[0] == 0)
-				Error("Missing label");
-			else
-			{
-				val = Eval();
+    switch(typ)
+    {
+        case o_EQU:
+            if (labl[0] == 0)
+                Error("Missing label");
+            else
+            {
+                val = Eval();
 
                 // allow EQU to 8051 register bit references
                 oldLine = linePtr;
@@ -965,26 +925,18 @@ int DoCPULabelOp(int typ, int parm, char *labl)
                     }
                 }
 
-				sprintf(word,"---- = %.4X",val & 0xFFFF);
-				for (i=5; i<11; i++)
-					listLine[i] = word[i];
-				DefSym(labl,val,parm==1,parm==0);
-			}
-			break;
+                sprintf(word,"---- = %.4X",val & 0xFFFF);
+                for (i=5; i<11; i++)
+                    listLine[i] = word[i];
+                DefSym(labl,val,parm==1,parm==0);
+            }
+            break;
 
-		default:
-			return 0;
-			break;
-	}
+        default:
+            return 0;
+            break;
+    }
     return 1;
-}
-
-
-void usage(void)
-{
-	stdversion();
-	stdusage();
-	exit(1);
 }
 
 
@@ -995,4 +947,5 @@ void PassInit(void)
 
 void AsmInit(void)
 {
+    endian = LITTLE_END;
 }

@@ -1,28 +1,18 @@
-// asm68HC11.c - copyright 1998-2006 Bruce Tomlin
-
-//#define DEBUG_PASS
-
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+// asm68HC11.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "68HC16 assembler"
-#define INSTR_MAX   6		// length of longest valid instruction
-#define CPU_BIG_ENDIAN      // CPU is big-endian
-
+#define THREE_TAB   // use three-tab data area in listings
 #include "asmguts.h"
 
 enum
 {
-	o_Inherent,     // implied instructions
+    o_Inherent,     // implied instructions
     o_Branch,       // short relative branch instructions
     o_LBranch,      // long relative branch instructions
     o_ImmediateW,   // immediate word instructions (ORP and ANDP)
     o_AIX,          // AIX/AIY/AIZ/AIS instructions
     o_MAC,          // MAC/RMAC instructions
-    o_PUSHM,        // PUSHM instruction
+    o_PSHM,         // PSHM instruction
     o_PULM,         // PULM instruction
     o_MOVB,         // MOVB/MOVW instructions
     o_Logical,      // byte-data logical instructions
@@ -43,434 +33,306 @@ enum
     o_ArithW,       // word-data arithmetic instructions
     o_Arith,        // byte-data arithmetic instructions
 
-//	o_Processor,// PROCESSOR pseudo-op
-//	o_CPUtype,  // cpu type pseudo-ops (.6502, etc.)
-
 //  o_Foo = o_LabelOp,
 };
 
-//enum cputype
-//{
-//	cpu_6800, cpu_6801, cpu_68HC11, cpu_6303
-//} cpu;
-
 struct OpcdRec opcdTab[] =
 {
-//	{"TEST",  o_Inherent, 0x00}, // 68HC11
+//  {"TEST",  o_Inherent, 0x00}, // 68HC11
 
-	{"ABA",   o_Inherent, 0x370B},
-	{"ABX",   o_Inherent, 0x374F},
-	{"ABY",   o_Inherent, 0x375F},
-	{"ABZ",   o_Inherent, 0x376F},
-	{"ACE",   o_Inherent, 0x3722},
-	{"ACED",  o_Inherent, 0x3723},
-	{"ADE",   o_Inherent, 0x2778},
-	{"ADX",   o_Inherent, 0x37CD},
-	{"ADY",   o_Inherent, 0x37DD},
-	{"ADZ",   o_Inherent, 0x37ED},
-	{"AEX",   o_Inherent, 0x374D},
-	{"AEY",   o_Inherent, 0x375D},
-	{"AEZ",   o_Inherent, 0x376D},
-	{"ASLA",  o_Inherent, 0x3704},
-	{"ASLB",  o_Inherent, 0x3714},
-	{"ASLD",  o_Inherent, 0x27F4},
-	{"ASLE",  o_Inherent, 0x2774},
-	{"ASLM",  o_Inherent, 0x27B6},
-	{"ASRA",  o_Inherent, 0x370D},
-	{"ASRB",  o_Inherent, 0x371D},
-	{"ASRD",  o_Inherent, 0x27FD},
-	{"ASRE",  o_Inherent, 0x277D},
-	{"ASRM",  o_Inherent, 0x27BA},
-	{"BGND",  o_Inherent, 0x37A6},
-	{"CBA",   o_Inherent, 0x371B},
-	{"CLRA",  o_Inherent, 0x3705},
-	{"CLRB",  o_Inherent, 0x3715},
-	{"CLRD",  o_Inherent, 0x27F5},
-	{"CLRE",  o_Inherent, 0x2775},
-	{"CLRM",  o_Inherent, 0x27B7},
-	{"COMA",  o_Inherent, 0x3700},
-	{"COMB",  o_Inherent, 0x3710},
-	{"COMD",  o_Inherent, 0x27F0},
-	{"COME",  o_Inherent, 0x2770},
-	{"DAA",   o_Inherent, 0x3721},
-	{"DECA",  o_Inherent, 0x3701},
-	{"DECB",  o_Inherent, 0x3711},
-	{"DECE",  o_Inherent, 0x2771},
-	{"EDIV",  o_Inherent, 0x3728},
-	{"EDIVS", o_Inherent, 0x3729},
-	{"EMUL",  o_Inherent, 0x3725},
-	{"EMULS", o_Inherent, 0x3726},
-	{"FDIV",  o_Inherent, 0x372B},
-	{"FMULS", o_Inherent, 0x3727},
-	{"IDIV",  o_Inherent, 0x372A},
-	{"INCA",  o_Inherent, 0x3703},
-	{"INCB",  o_Inherent, 0x3713},
-	{"INCE",  o_Inherent, 0x2773},
-	{"LDHI",  o_Inherent, 0x27B0},
-	{"LPSTOP",o_Inherent, 0x27F1},
-	{"LSRA",  o_Inherent, 0x370F},
-	{"LSRB",  o_Inherent, 0x371F},
-	{"LSRD",  o_Inherent, 0x27FF},
-	{"LSRE",  o_Inherent, 0x277F},
-	{"MUL",   o_Inherent, 0x3724},
-	{"NEGA",  o_Inherent, 0x3702},
-	{"NEGB",  o_Inherent, 0x3712},
-	{"NEGD",  o_Inherent, 0x27F2},
-	{"NEGE",  o_Inherent, 0x2772},
-	{"NOP",   o_Inherent, 0x27CC},
-	{"PSHA",  o_Inherent, 0x3708},
-	{"PSHB",  o_Inherent, 0x3718},
-	{"PSHMAC",o_Inherent, 0x27B8},
-	{"PULA",  o_Inherent, 0x3709},
-	{"PULB",  o_Inherent, 0x3719},
-	{"PULMAC",o_Inherent, 0x27B9},
-	{"ROLA",  o_Inherent, 0x370C},
-	{"ROLB",  o_Inherent, 0x371C},
-	{"ROLD",  o_Inherent, 0x27FC},
-	{"ROLE",  o_Inherent, 0x277C},
-	{"RORA",  o_Inherent, 0x370E},
-	{"RORB",  o_Inherent, 0x371E},
-	{"RORD",  o_Inherent, 0x27FE},
-	{"RORE",  o_Inherent, 0x277E},
-	{"RTI",   o_Inherent, 0x2777},
-	{"RTS",   o_Inherent, 0x27F7},
-	{"SBA",   o_Inherent, 0x370A},
-	{"SDE",   o_Inherent, 0x2779},
-	{"SWI",   o_Inherent, 0x3720},
-	{"SXT",   o_Inherent, 0x27F8},
-	{"TAB",   o_Inherent, 0x3717},
-	{"TAP",   o_Inherent, 0x37FD},
-	{"TBA",   o_Inherent, 0x3707},
-	{"TBEK",  o_Inherent, 0x27FA},
-	{"TBSK",  o_Inherent, 0x379F},
-	{"TBXK",  o_Inherent, 0x379C},
-	{"TBYK",  o_Inherent, 0x379D},
-	{"TBZK",  o_Inherent, 0x379E},
-	{"TDE",   o_Inherent, 0x277B},
-	{"TDMSK", o_Inherent, 0x372F},
-	{"TDP",   o_Inherent, 0x372D},
-	{"TED",   o_Inherent, 0x27FB},
-	{"TEDM",  o_Inherent, 0x27B1},
-	{"TEKB",  o_Inherent, 0x27BB},
-	{"TEM",   o_Inherent, 0x27B2},
-	{"TMER",  o_Inherent, 0x27B4},
-	{"TMET",  o_Inherent, 0x27B5},
-	{"TMXED", o_Inherent, 0x27B3},
-	{"TPA",   o_Inherent, 0x37FC},
-	{"TPD",   o_Inherent, 0x372C},
-	{"TSKB",  o_Inherent, 0x37AF},
-	{"TSTA",  o_Inherent, 0x3706},
-	{"TSTB",  o_Inherent, 0x3716},
-	{"TSTD",  o_Inherent, 0x27F6},
-	{"TSTE",  o_Inherent, 0x2776},
-	{"TSX",   o_Inherent, 0x27CF},
-	{"TSY",   o_Inherent, 0x275F},
-	{"TSZ",   o_Inherent, 0x276F},
-	{"TXKB",  o_Inherent, 0x37AC},
-	{"TXS",   o_Inherent, 0x374E},
-	{"TXY",   o_Inherent, 0x275C},
-	{"TXZ",   o_Inherent, 0x276C},
-	{"TYKB",  o_Inherent, 0x37AD},
-	{"TYS",   o_Inherent, 0x375E},
-	{"TYX",   o_Inherent, 0x27CD},
-	{"TYZ",   o_Inherent, 0x276D},
-	{"TZKB",  o_Inherent, 0x37AE},
-	{"TZS",   o_Inherent, 0x376E},
-	{"TZX",   o_Inherent, 0x27CE},
-	{"TZY",   o_Inherent, 0x275E},
-	{"WAI",   o_Inherent, 0x27F3},
-	{"XGAB",  o_Inherent, 0x371A},
-	{"XGDE",  o_Inherent, 0x277A},
-	{"XGDX",  o_Inherent, 0x37CC},
-	{"XGDY",  o_Inherent, 0x37DC},
-	{"XGDZ",  o_Inherent, 0x37EC},
-	{"XGEX",  o_Inherent, 0x374C},
-	{"XGEY",  o_Inherent, 0x375C},
-	{"XGEZ",  o_Inherent, 0x376C},
+    {"ABA",   o_Inherent, 0x370B},
+    {"ABX",   o_Inherent, 0x374F},
+    {"ABY",   o_Inherent, 0x375F},
+    {"ABZ",   o_Inherent, 0x376F},
+    {"ACE",   o_Inherent, 0x3722},
+    {"ACED",  o_Inherent, 0x3723},
+    {"ADE",   o_Inherent, 0x2778},
+    {"ADX",   o_Inherent, 0x37CD},
+    {"ADY",   o_Inherent, 0x37DD},
+    {"ADZ",   o_Inherent, 0x37ED},
+    {"AEX",   o_Inherent, 0x374D},
+    {"AEY",   o_Inherent, 0x375D},
+    {"AEZ",   o_Inherent, 0x376D},
+    {"ASLA",  o_Inherent, 0x3704},
+    {"ASLB",  o_Inherent, 0x3714},
+    {"ASLD",  o_Inherent, 0x27F4},
+    {"ASLE",  o_Inherent, 0x2774},
+    {"ASLM",  o_Inherent, 0x27B6},
+    {"ASRA",  o_Inherent, 0x370D},
+    {"ASRB",  o_Inherent, 0x371D},
+    {"ASRD",  o_Inherent, 0x27FD},
+    {"ASRE",  o_Inherent, 0x277D},
+    {"ASRM",  o_Inherent, 0x27BA},
+    {"BGND",  o_Inherent, 0x37A6},
+    {"CBA",   o_Inherent, 0x371B},
+    {"CLRA",  o_Inherent, 0x3705},
+    {"CLRB",  o_Inherent, 0x3715},
+    {"CLRD",  o_Inherent, 0x27F5},
+    {"CLRE",  o_Inherent, 0x2775},
+    {"CLRM",  o_Inherent, 0x27B7},
+    {"COMA",  o_Inherent, 0x3700},
+    {"COMB",  o_Inherent, 0x3710},
+    {"COMD",  o_Inherent, 0x27F0},
+    {"COME",  o_Inherent, 0x2770},
+    {"DAA",   o_Inherent, 0x3721},
+    {"DECA",  o_Inherent, 0x3701},
+    {"DECB",  o_Inherent, 0x3711},
+    {"DECE",  o_Inherent, 0x2771},
+    {"EDIV",  o_Inherent, 0x3728},
+    {"EDIVS", o_Inherent, 0x3729},
+    {"EMUL",  o_Inherent, 0x3725},
+    {"EMULS", o_Inherent, 0x3726},
+    {"FDIV",  o_Inherent, 0x372B},
+    {"FMULS", o_Inherent, 0x3727},
+    {"IDIV",  o_Inherent, 0x372A},
+    {"INCA",  o_Inherent, 0x3703},
+    {"INCB",  o_Inherent, 0x3713},
+    {"INCE",  o_Inherent, 0x2773},
+    {"LDHI",  o_Inherent, 0x27B0},
+    {"LPSTOP",o_Inherent, 0x27F1},
+    {"LSRA",  o_Inherent, 0x370F},
+    {"LSRB",  o_Inherent, 0x371F},
+    {"LSRD",  o_Inherent, 0x27FF},
+    {"LSRE",  o_Inherent, 0x277F},
+    {"MUL",   o_Inherent, 0x3724},
+    {"NEGA",  o_Inherent, 0x3702},
+    {"NEGB",  o_Inherent, 0x3712},
+    {"NEGD",  o_Inherent, 0x27F2},
+    {"NEGE",  o_Inherent, 0x2772},
+    {"NOP",   o_Inherent, 0x27CC},
+    {"PSHA",  o_Inherent, 0x3708},
+    {"PSHB",  o_Inherent, 0x3718},
+    {"PSHMAC",o_Inherent, 0x27B8},
+    {"PULA",  o_Inherent, 0x3709},
+    {"PULB",  o_Inherent, 0x3719},
+    {"PULMAC",o_Inherent, 0x27B9},
+    {"ROLA",  o_Inherent, 0x370C},
+    {"ROLB",  o_Inherent, 0x371C},
+    {"ROLD",  o_Inherent, 0x27FC},
+    {"ROLE",  o_Inherent, 0x277C},
+    {"RORA",  o_Inherent, 0x370E},
+    {"RORB",  o_Inherent, 0x371E},
+    {"RORD",  o_Inherent, 0x27FE},
+    {"RORE",  o_Inherent, 0x277E},
+    {"RTI",   o_Inherent, 0x2777},
+    {"RTS",   o_Inherent, 0x27F7},
+    {"SBA",   o_Inherent, 0x370A},
+    {"SDE",   o_Inherent, 0x2779},
+    {"SWI",   o_Inherent, 0x3720},
+    {"SXT",   o_Inherent, 0x27F8},
+    {"TAB",   o_Inherent, 0x3717},
+    {"TAP",   o_Inherent, 0x37FD},
+    {"TBA",   o_Inherent, 0x3707},
+    {"TBEK",  o_Inherent, 0x27FA},
+    {"TBSK",  o_Inherent, 0x379F},
+    {"TBXK",  o_Inherent, 0x379C},
+    {"TBYK",  o_Inherent, 0x379D},
+    {"TBZK",  o_Inherent, 0x379E},
+    {"TDE",   o_Inherent, 0x277B},
+    {"TDMSK", o_Inherent, 0x372F},
+    {"TDP",   o_Inherent, 0x372D},
+    {"TED",   o_Inherent, 0x27FB},
+    {"TEDM",  o_Inherent, 0x27B1},
+    {"TEKB",  o_Inherent, 0x27BB},
+    {"TEM",   o_Inherent, 0x27B2},
+    {"TMER",  o_Inherent, 0x27B4},
+    {"TMET",  o_Inherent, 0x27B5},
+    {"TMXED", o_Inherent, 0x27B3},
+    {"TPA",   o_Inherent, 0x37FC},
+    {"TPD",   o_Inherent, 0x372C},
+    {"TSKB",  o_Inherent, 0x37AF},
+    {"TSTA",  o_Inherent, 0x3706},
+    {"TSTB",  o_Inherent, 0x3716},
+    {"TSTD",  o_Inherent, 0x27F6},
+    {"TSTE",  o_Inherent, 0x2776},
+    {"TSX",   o_Inherent, 0x27CF},
+    {"TSY",   o_Inherent, 0x275F},
+    {"TSZ",   o_Inherent, 0x276F},
+    {"TXKB",  o_Inherent, 0x37AC},
+    {"TXS",   o_Inherent, 0x374E},
+    {"TXY",   o_Inherent, 0x275C},
+    {"TXZ",   o_Inherent, 0x276C},
+    {"TYKB",  o_Inherent, 0x37AD},
+    {"TYS",   o_Inherent, 0x375E},
+    {"TYX",   o_Inherent, 0x27CD},
+    {"TYZ",   o_Inherent, 0x276D},
+    {"TZKB",  o_Inherent, 0x37AE},
+    {"TZS",   o_Inherent, 0x376E},
+    {"TZX",   o_Inherent, 0x27CE},
+    {"TZY",   o_Inherent, 0x275E},
+    {"WAI",   o_Inherent, 0x27F3},
+    {"XGAB",  o_Inherent, 0x371A},
+    {"XGDE",  o_Inherent, 0x277A},
+    {"XGDX",  o_Inherent, 0x37CC},
+    {"XGDY",  o_Inherent, 0x37DC},
+    {"XGDZ",  o_Inherent, 0x37EC},
+    {"XGEX",  o_Inherent, 0x374C},
+    {"XGEY",  o_Inherent, 0x375C},
+    {"XGEZ",  o_Inherent, 0x376C},
 
-	{"BCC",   o_Branch,   0xB4}, // aka BHS
-	{"BCS",   o_Branch,   0xB5}, // aka BLO
-	{"BEQ",   o_Branch,   0xB7},
-	{"BGE",   o_Branch,   0xBC},
-	{"BGT",   o_Branch,   0xBE},
-	{"BHI",   o_Branch,   0xB2},
-	{"BLE",   o_Branch,   0xBF},
-	{"BLS",   o_Branch,   0xB3},
-	{"BLT",   o_Branch,   0xBD},
-	{"BMI",   o_Branch,   0xBB},
-	{"BNE",   o_Branch,   0xB6},
-	{"BPL",   o_Branch,   0xBA},
-	{"BRA",   o_Branch,   0xB0},
-	{"BRN",   o_Branch,   0xB1},
-	{"BSR",   o_Branch,   0x36},
-	{"BVC",   o_Branch,   0xB8},
-	{"BVS",   o_Branch,   0xB9},
+    {"BCC",   o_Branch,   0xB4}, // aka BHS
+    {"BCS",   o_Branch,   0xB5}, // aka BLO
+    {"BEQ",   o_Branch,   0xB7},
+    {"BGE",   o_Branch,   0xBC},
+    {"BGT",   o_Branch,   0xBE},
+    {"BHI",   o_Branch,   0xB2},
+    {"BLE",   o_Branch,   0xBF},
+    {"BLS",   o_Branch,   0xB3},
+    {"BLT",   o_Branch,   0xBD},
+    {"BMI",   o_Branch,   0xBB},
+    {"BNE",   o_Branch,   0xB6},
+    {"BPL",   o_Branch,   0xBA},
+    {"BRA",   o_Branch,   0xB0},
+    {"BRN",   o_Branch,   0xB1},
+    {"BSR",   o_Branch,   0x36},
+    {"BVC",   o_Branch,   0xB8},
+    {"BVS",   o_Branch,   0xB9},
 
-	{"LBCC",  o_LBranch,  0x3784},    // aka LBHS
-	{"LBCS",  o_LBranch,  0x3785},    // aka LBLO
-	{"LBEQ",  o_LBranch,  0x3787},
-	{"LBEV",  o_LBranch,  0x3791},
-	{"LBGE",  o_LBranch,  0x378C},
-	{"LBGT",  o_LBranch,  0x378E},
-	{"LBHI",  o_LBranch,  0x3782},
-	{"LBLE",  o_LBranch,  0x378F},
-	{"LBLS",  o_LBranch,  0x3783},
-	{"LBLT",  o_LBranch,  0x378D},
-	{"LBMI",  o_LBranch,  0x378B},
-	{"LBMV",  o_LBranch,  0x3790},
-	{"LBNE",  o_LBranch,  0x3786},
-	{"LBPL",  o_LBranch,  0x378A},
-	{"LBRA",  o_LBranch,  0x3780},
-	{"LBRN",  o_LBranch,  0x3781},
-	{"LBSR",  o_LBranch,  0x27F9},
-	{"LBVC",  o_LBranch,  0x3788},
-	{"LBVS",  o_LBranch,  0x3789},
+    {"LBCC",  o_LBranch,  0x3784},    // aka LBHS
+    {"LBCS",  o_LBranch,  0x3785},    // aka LBLO
+    {"LBEQ",  o_LBranch,  0x3787},
+    {"LBEV",  o_LBranch,  0x3791},
+    {"LBGE",  o_LBranch,  0x378C},
+    {"LBGT",  o_LBranch,  0x378E},
+    {"LBHI",  o_LBranch,  0x3782},
+    {"LBLE",  o_LBranch,  0x378F},
+    {"LBLS",  o_LBranch,  0x3783},
+    {"LBLT",  o_LBranch,  0x378D},
+    {"LBMI",  o_LBranch,  0x378B},
+    {"LBMV",  o_LBranch,  0x3790},
+    {"LBNE",  o_LBranch,  0x3786},
+    {"LBPL",  o_LBranch,  0x378A},
+    {"LBRA",  o_LBranch,  0x3780},
+    {"LBRN",  o_LBranch,  0x3781},
+    {"LBSR",  o_LBranch,  0x27F9},
+    {"LBVC",  o_LBranch,  0x3788},
+    {"LBVS",  o_LBranch,  0x3789},
 
-	{"ANDP",  o_ImmediateW, 0x373A},
-	{"ORP",   o_ImmediateW, 0x373B},
+    {"ANDP",  o_ImmediateW, 0x373A},
+    {"ORP",   o_ImmediateW, 0x373B},
 
-	{"AIS",   o_AIX,   0x3F},
-	{"AIX",   o_AIX,   0x3C},
-	{"AIY",   o_AIX,   0x3D},
-	{"AIZ",   o_AIX,   0x3E},
+    {"AIS",   o_AIX,     0x3F},
+    {"AIX",   o_AIX,     0x3C},
+    {"AIY",   o_AIX,     0x3D},
+    {"AIZ",   o_AIX,     0x3E},
 
-	{"AIS",   o_AIX,   0x3F},
-	{"AIX",   o_AIX,   0x3C},
-	{"AIY",   o_AIX,   0x3D},
-	{"AIZ",   o_AIX,   0x3E},
+    {"AIS",   o_AIX,     0x3F},
+    {"AIX",   o_AIX,     0x3C},
+    {"AIY",   o_AIX,     0x3D},
+    {"AIZ",   o_AIX,     0x3E},
 
-	{"MAC",   o_MAC,   0x7B},
-	{"RMAC",  o_MAC,   0xFB},
+    {"MAC",   o_MAC,     0x7B},
+    {"RMAC",  o_MAC,     0xFB},
 
-	{"PSHM",  o_PUSHM, 0x34},
-	{"PULM",  o_PULM,  0x35},
+    {"PSHM",  o_PSHM,    0x34},
+    {"PULM",  o_PULM,    0x35},
 
-    {"MOVB",  o_MOVB,  0x00},
-    {"MOVW",  o_MOVB,  0x01},
+    {"MOVB",  o_MOVB,    0x00},
+    {"MOVW",  o_MOVB,    0x01},
 
-	{"ASLW", o_LogicalW, 0x04},
-	{"ASRW", o_LogicalW, 0x0D},
-	{"CLRW", o_LogicalW, 0x05},
-	{"COMW", o_LogicalW, 0x00},
-	{"DECW", o_LogicalW, 0x01},
-	{"INCW", o_LogicalW, 0x03},
-	{"LSRW", o_LogicalW, 0x0F},
-	{"NEGW", o_LogicalW, 0x02},
-	{"ROLW", o_LogicalW, 0x0C},
-	{"RORW", o_LogicalW, 0x0E},
-	{"TSTW", o_LogicalW, 0x06},
+    {"ASLW", o_LogicalW, 0x04},
+    {"ASRW", o_LogicalW, 0x0D},
+    {"CLRW", o_LogicalW, 0x05},
+    {"COMW", o_LogicalW, 0x00},
+    {"DECW", o_LogicalW, 0x01},
+    {"INCW", o_LogicalW, 0x03},
+    {"LSRW", o_LogicalW, 0x0F},
+    {"NEGW", o_LogicalW, 0x02},
+    {"ROLW", o_LogicalW, 0x0C},
+    {"RORW", o_LogicalW, 0x0E},
+    {"TSTW", o_LogicalW, 0x06},
 
-    {"STE",  o_STE,    0x0A},
-    {"ADDE", o_ADDE,   0x01},
-    {"ADCE", o_ArithE, 0x03},
-    {"ANDE", o_ArithE, 0x06},
-    {"CPE",  o_ArithE, 0x08},
-    {"EORE", o_ArithE, 0x04},
-    {"LDE",  o_ArithE, 0x05},
-    {"ORE",  o_ArithE, 0x07},
-    {"SBCE", o_ArithE, 0x02},
-    {"SUBE", o_ArithE, 0x00},
+    {"STE",  o_STE,      0x0A},
+    {"ADDE", o_ADDE,     0x01},
+    {"ADCE", o_ArithE,   0x03},
+    {"ANDE", o_ArithE,   0x06},
+    {"CPE",  o_ArithE,   0x08},
+    {"EORE", o_ArithE,   0x04},
+    {"LDE",  o_ArithE,   0x05},
+    {"ORE",  o_ArithE,   0x07},
+    {"SBCE", o_ArithE,   0x02},
+    {"SUBE", o_ArithE,   0x00},
 
-    {"ASL",  o_Logical, 0x04},
-    {"ASR",  o_Logical, 0x0D},
-    {"CLR",  o_Logical, 0x05},
-    {"COM",  o_Logical, 0x00},
-    {"DEC",  o_Logical, 0x01},
-    {"INC",  o_Logical, 0x03},
-    {"LSR",  o_Logical, 0x0F},
-    {"NEG",  o_Logical, 0x02},
-    {"ROL",  o_Logical, 0x0C},
-    {"ROR",  o_Logical, 0x0E},
-    {"TST",  o_Logical, 0x06},
+    {"ASL",  o_Logical,  0x04},
+    {"ASR",  o_Logical,  0x0D},
+    {"CLR",  o_Logical,  0x05},
+    {"COM",  o_Logical,  0x00},
+    {"DEC",  o_Logical,  0x01},
+    {"INC",  o_Logical,  0x03},
+    {"LSR",  o_Logical,  0x0F},
+    {"NEG",  o_Logical,  0x02},
+    {"ROL",  o_Logical,  0x0C},
+    {"ROR",  o_Logical,  0x0E},
+    {"TST",  o_Logical,  0x06},
 
-    {"BCLRW", o_BCLRW,  0x2708},
-    {"BSETW", o_BCLRW,  0x2709},
-    {"BCLR",  o_BCLR,   0x08},
-    {"BSET",  o_BCLR,   0x09},
+    {"BCLRW", o_BCLRW,   0x2708},
+    {"BSETW", o_BCLRW,   0x2709},
+    {"BCLR",  o_BCLR,    0x08},
+    {"BSET",  o_BCLR,    0x09},
 
-    {"BRCLR", o_BRCLR,  0x0A},
-    {"BRSET", o_BRCLR,  0x0B},
+    {"BRCLR", o_BRCLR,   0x0A},
+    {"BRSET", o_BRCLR,   0x0B},
 
-    {"STS",   o_STX,    0x8F},
-    {"STX",   o_STX,    0x8C},
-    {"STY",   o_STX,    0x8D},
-    {"STZ",   o_STX,    0x8E},
-    {"LDX",   o_LDX,    0xCC},
-    {"LDY",   o_LDX,    0xCD},
-    {"LDZ",   o_LDX,    0xCE},
-    {"CPS",   o_ArithX, 0x4F},
-    {"CPX",   o_ArithX, 0x4C},
-    {"CPY",   o_ArithX, 0x4D},
-    {"CPZ",   o_ArithX, 0x4E},
-    {"LDS",   o_ArithX, 0xCF},
+    {"STS",   o_STX,     0x8F},
+    {"STX",   o_STX,     0x8C},
+    {"STY",   o_STX,     0x8D},
+    {"STZ",   o_STX,     0x8E},
+    {"LDX",   o_LDX,     0xCC},
+    {"LDY",   o_LDX,     0xCD},
+    {"LDZ",   o_LDX,     0xCE},
+    {"CPS",   o_ArithX,  0x4F},
+    {"CPX",   o_ArithX,  0x4C},
+    {"CPY",   o_ArithX,  0x4D},
+    {"CPZ",   o_ArithX,  0x4E},
+    {"LDS",   o_ArithX,  0xCF},
 
-    {"JMP",   o_JMP,    0x4B},
-    {"JSR",   o_JMP,    0x89},
+    {"JMP",   o_JMP,     0x4B},
+    {"JSR",   o_JMP,     0x89},
 
     {"STD",   o_STD,     0x378A},
     {"STAA",  o_StoreAB, 0x174A},
     {"STAB",  o_StoreAB, 0x17CA},
     {"ADDD",  o_ADDD,    0x3781},
-    {"ADCD",  o_ArithW, 0x3783},
-    {"ANDD",  o_ArithW, 0x3786},
-    {"CPD",   o_ArithW, 0x3788},
-    {"EORD",  o_ArithW, 0x3784},
-    {"LDD",   o_ArithW, 0x3785},
-    {"ORD",   o_ArithW, 0x3787},
-    {"SBCD",  o_ArithW, 0x3782},
-    {"SUBD",  o_ArithW, 0x3780},
-    {"ADCA",  o_Arith, 0x1743},
-    {"ADCB",  o_Arith, 0x17C3},
-    {"ADDA",  o_Arith, 0x1741},
-    {"ADDB",  o_Arith, 0x17C1},
-    {"ANDA",  o_Arith, 0x1746},
-    {"ANDB",  o_Arith, 0x17C6},
-    {"BITA",  o_Arith, 0x1749},
-    {"BITB",  o_Arith, 0x17C9},
-    {"CMPA",  o_Arith, 0x1748},
-    {"CMPB",  o_Arith, 0x17C8},
-    {"EORA",  o_Arith, 0x1744},
-    {"EORB",  o_Arith, 0x17C4},
-    {"LDAA",  o_Arith, 0x1745},
-    {"LDAB",  o_Arith, 0x17C5},
-    {"ORAA",  o_Arith, 0x1747},
-    {"ORAB",  o_Arith, 0x17C7},
-    {"SBCA",  o_Arith, 0x1742},
-    {"SBCB",  o_Arith, 0x17C2},
-    {"SUBA",  o_Arith, 0x1740},
-    {"SUBB",  o_Arith, 0x17C0},
+    {"ADCD",  o_ArithW,  0x3783},
+    {"ANDD",  o_ArithW,  0x3786},
+    {"CPD",   o_ArithW,  0x3788},
+    {"EORD",  o_ArithW,  0x3784},
+    {"LDD",   o_ArithW,  0x3785},
+    {"ORD",   o_ArithW,  0x3787},
+    {"SBCD",  o_ArithW,  0x3782},
+    {"SUBD",  o_ArithW,  0x3780},
+    {"ADCA",  o_Arith,   0x1743},
+    {"ADCB",  o_Arith,   0x17C3},
+    {"ADDA",  o_Arith,   0x1741},
+    {"ADDB",  o_Arith,   0x17C1},
+    {"ANDA",  o_Arith,   0x1746},
+    {"ANDB",  o_Arith,   0x17C6},
+    {"BITA",  o_Arith,   0x1749},
+    {"BITB",  o_Arith,   0x17C9},
+    {"CMPA",  o_Arith,   0x1748},
+    {"CMPB",  o_Arith,   0x17C8},
+    {"EORA",  o_Arith,   0x1744},
+    {"EORB",  o_Arith,   0x17C4},
+    {"LDAA",  o_Arith,   0x1745},
+    {"LDAB",  o_Arith,   0x17C5},
+    {"ORAA",  o_Arith,   0x1747},
+    {"ORAB",  o_Arith,   0x17C7},
+    {"SBCA",  o_Arith,   0x1742},
+    {"SBCB",  o_Arith,   0x17C2},
+    {"SUBA",  o_Arith,   0x1740},
+    {"SUBB",  o_Arith,   0x17C0},
 
-//	{"PROCESSOR",o_Processor,0},
-//	{"CPU",      o_Processor,0},
-//	{".6800",    o_CPUtype,cpu_6800},
-//	{".6801",    o_CPUtype,cpu_6801},
-//	{".6802",    o_CPUtype,cpu_6800},
-//	{".6803",    o_CPUtype,cpu_6801},
-//	{".6808",    o_CPUtype,cpu_6801},
-//	{".6303",    o_CPUtype,cpu_6303},
-//	{".6811",    o_CPUtype,cpu_68HC11},
-//	{".68HC11",  o_CPUtype,cpu_68HC11},
-//	{".68HC711", o_CPUtype,cpu_68HC11},
-//	{".68HC811", o_CPUtype,cpu_68HC11},
-//	{".68HC99",  o_CPUtype,cpu_68HC11},
-
-	{"",     o_Illegal, 0}
+    {"",     o_Illegal,  0}
 };
 
 
 // --------------------------------------------------------------
 
-const char regs[] = "D  E  X  Y  Z  K  CCR";
-
-int FindReg(char *regName, const char *regList)
-{
-
-	const char	*p;
-	char		r0,r1,r2;
-	int			reg;
-
-	r0 = regName[0];
-	r1 = ' ';
-	r2 = ' ';
-	if (regName[1])
-	{
-		r1 = regName[1];
-		if (regName[2])
-		{
-			r2 = regName[2];
-			if (r2 && regName[3])
-				return -1;	// longer than 3 chars!
-		}
-	}
-
-
-	reg = 0;
-	p = regList;
-	while (*p)
-	{
-		if (r0 == p[0] && r1 == p[1] && r2 == p[2])
-			return reg;
-
-		p = p + 3;
-		reg++;
-	}
-
-	return -1;
-}
-
-
-void XInstr1(int op)
-{
-	if (op < 256)   Instr1(op);
-			else	Instr2(op >> 8, op & 255);
-}
-
-
-void XInstr2(int op, unsigned char b)
-{
-	if (op < 256)   Instr2(op, b);
-			else	Instr3(op >> 8, op & 255, b);
-}
-
-
-void XInstr3(int op, unsigned char b1, unsigned char b2)
-{
-	if (op < 256)   Instr3(op, b1, b2);
-			else	Instr4(op >> 8, op & 255, b1, b2);
-}
-
-
-void XInstr3W(int op, int w)
-{
-	if (op < 256)   Instr3W(op, w);
-			else	Instr4W(op >> 8, op & 255, w);
-}
-
-
-void XInstr4(int op, unsigned char b1, unsigned char b2, unsigned char b3)
-{
-	if (op < 256)   Instr4(op, b1, b2, b3);
-			else	Instr5(op >> 8, op & 255, b1, b2, b3);
-}
-
-
-void XInstr4W(int op, unsigned char b, int w)
-{
-	if (op < 256)   Instr4W(op, b, w);
-			else	Instr5W(op >> 8, op & 255, b, w);
-}
-
-
-void Instr6(u_char b1, u_char b2, u_char b3, u_char b4, u_char b5, u_char b6)
-{
-	instr[0] = b1;
-	instr[1] = b2;
-	instr[2] = b3;
-	instr[3] = b4;
-	instr[4] = b5;
-	instr[5] = b6;
-	instrLen = 6;
-}
-
-
-void XInstr5WW(int op, int w1, int w2)
-{
-    if (op < 256)   Instr5(op, w1 >> 8, w1 & 255, w2 >> 8, w2 & 255);
-            else    Instr6(op >> 8, op & 255, w1 >> 8, w1 & 255, w2 >> 8, w2 & 255);
-}
-
-void BadMode()
-{
-	Error("Illegal addressing mode");
-	EatIt();
-}
-
-
 int GetIndex(void)
 {
-	Str255	word;
-	char	*oldLine;
-	int		token;
+    Str255  word;
+    char    *oldLine;
+    int     token;
 
     oldLine = linePtr;
     token = GetWord(word);
@@ -484,44 +346,45 @@ int GetIndex(void)
     return -1;
 }
 
+
 int DoCPUOpcode(int typ, int parm)
 {
-	int		val,val2,val3;
-	Str255	word;
-	char	*oldLine;
-	int		token;
-//	char	force;
-	char	reg;
+    int     val,val2,val3;
+    Str255  word;
+    char    *oldLine;
+    int     token;
+//  char    force;
+    char    reg;
     bool    known;
 
-	switch(typ)
-	{
-		case o_Inherent:
-			XInstr1(parm);
-			break;
+    switch(typ)
+    {
+        case o_Inherent:
+            InstrX(parm);
+            break;
 
-		case o_Branch:
-			val = EvalBranch(2);
-			XInstr2(parm,val);
-			break;
+        case o_Branch:
+            val = EvalBranch(2);
+            InstrXB(parm,val);
+            break;
 
-		case o_LBranch:
-			if (parm < 256)	val = EvalLBranch(3);
-					else	val = EvalLBranch(4);
-			XInstr3W(parm, val);
-			break;
+        case o_LBranch:
+            if (parm < 256) val = EvalLBranch(3);
+                    else    val = EvalLBranch(4);
+            InstrXW(parm, val);
+            break;
 
         case o_ImmediateW:
             Expect("#");
             val = Eval();
-            XInstr2(parm, val);
+            InstrXW(parm, val);
             break;
 
         case o_AIX:
             Expect("#");
             val = Eval();
-            if (evalKnown && -128 <= val && val <= 127) XInstr2(parm, val);
-                                                   else XInstr3W(parm+0x3700, val);
+            if (evalKnown && -128 <= val && val <= 127) InstrXB(parm       ,val);
+                                                   else InstrXW(parm+0x3700,val);
             break;
 
         case o_MAC:
@@ -530,7 +393,7 @@ int DoCPUOpcode(int typ, int parm)
             if (token == '#')
             {
                 val=Eval();
-                Instr2(parm,val);
+                InstrXB(parm,val);
             }
             else
             {
@@ -541,25 +404,25 @@ int DoCPUOpcode(int typ, int parm)
                 if (val < 0 || val > 15 || val2 < 0 || val2 > 15)
                     IllegalOperand();
                 else
-                    Instr2(parm,val * 16 + val2);
+                    InstrXB(parm,val * 16 + val2);
             }
             break;
 
-        case o_PUSHM:
+        case o_PSHM:
         case o_PULM:
             val = 0;
 
             token = GetWord(word);
             while (token)
             {
-                reg = FindReg(word,regs);
+                reg = FindReg(word,"D E X Y Z K CCR");
                 if (reg < 0) IllegalOperand();
                 else
                 {
                     if (typ == o_PULM) reg = 6 - reg;
                     reg = 1 << reg;
                     if (val & reg)
-                        Error("PUSHM/PULM register used twice");
+                        Error("PSHM/PULM register used twice");
                     else
                         val = val | reg;
                 }
@@ -578,9 +441,9 @@ int DoCPUOpcode(int typ, int parm)
 
             if (val == 0)
             {
-                Warning("PUSHM/PULM with no registers");
+                Warning("PSHM/PULM with no registers");
             }
-            else XInstr2(parm,val);
+            else InstrXB(parm,val);
 
             break;
 
@@ -596,7 +459,7 @@ int DoCPUOpcode(int typ, int parm)
                 CheckByte(val);
                 Comma();
                 val2 = Eval();
-                XInstr4W(parm+0x30,val,val2);
+                InstrXBW(parm+0x30,val,val2);
             }
             else if (reg < 0)
             {
@@ -606,14 +469,16 @@ int DoCPUOpcode(int typ, int parm)
                 if (reg == 0)   // $xxxx,$yy,X
                 {
                     CheckByte(val2);
-                    XInstr4W(parm+0x32,val2,val);
+                    InstrXBW(parm+0x32,val2,val);
                 }
                 else if (reg < 0)   // $xxxx,$yyyy
                 {
-                    XInstr5WW(parm+0x37FE,val,val2);
-                    for (val = 0; val < instrLen; val++)
-                        bytStr[val] = instr[val];
-                    instrLen = -instrLen;
+                    InstrXWW(parm+0x37FE,val,val2);
+#ifdef THREE_TAB
+                    hexSpaces = 0x14;
+#else
+                    instrLen = -instrLen; // more than 5 bytes, so use long DB listing format
+#endif
                 }
                 else IllegalOperand();
             }
@@ -629,9 +494,9 @@ int DoCPUOpcode(int typ, int parm)
             val=Eval();
             reg=GetIndex();
             if (reg < 0)    // no index register
-                XInstr3W(parm+0x2730,val);
+                InstrXW(parm+0x2730,val);
             else
-                XInstr3W(parm+0x2700+reg*16,val);
+                InstrXW(parm+0x2700+reg*16,val);
             break;
 
         case o_Logical:
@@ -652,12 +517,12 @@ int DoCPUOpcode(int typ, int parm)
             reg=GetIndex();
             if (reg < 0)    // no index register
             {
-                XInstr3W(parm+0x1730,val);
+                InstrXW(parm+0x1730,val);
             }
             else
             {
-                if (evalKnown && 0 <= val && val <= 255) XInstr2(parm+reg*16,val);
-                                                    else XInstr3W(parm+0x1700+reg*16,val);
+                if (evalKnown && 0 <= val && val <= 255) InstrXB(parm+reg*16       ,val);
+                                                    else InstrXW(parm+0x1700+reg*16,val);
             }
             break;
 
@@ -676,8 +541,8 @@ int DoCPUOpcode(int typ, int parm)
             if (token == '#' && typ != o_STE)
             {
                 val=Eval();
-                if (evalKnown && typ == o_ADDE && -128 <= val && val <= 127) Instr2(0x7C,val);
-                                                                        else XInstr3W(parm+0x3730,val);
+                if (evalKnown && typ == o_ADDE && -128 <= val && val <= 127) InstrXB(       0x7C,val);
+                                                                        else InstrXW(parm+0x3730,val);
             }
             else
             {
@@ -686,12 +551,12 @@ int DoCPUOpcode(int typ, int parm)
                 reg = GetIndex();
                 if (reg < 0)    // no index register
                 {
-                    XInstr3W(parm+0x3770,val);
+                    InstrXW(parm+0x3770,val);
                 }
                 else
                 {
-                    if (evalKnown && 0 <= val && val <= 255) XInstr2(parm+reg*16,val);
-                                                        else XInstr3W(parm+0x3740+reg*16,val);
+                    if (evalKnown && 0 <= val && val <= 255) InstrXB(parm+       reg*16,val);
+                                                        else InstrXW(parm+0x3740+reg*16,val);
                 }
             }
             break;
@@ -728,23 +593,23 @@ int DoCPUOpcode(int typ, int parm)
                 {
                     val3 = EvalBranch(4);
                     if (reg<0) reg=3;
-                    Instr4((~parm & 0x01)*0x40 + 0x8B + reg*16,val2,val,val3);
+                    InstrXBBB((~parm & 0x01)*0x40 + 0x8B + reg*16,val2,val,val3);
                 }
                 else
                 {
                     val3 = EvalBranch(5);
                     if (reg<0) reg=3;
-                    Instr5(parm+reg*16,val2,val >> 8,val & 0xFF,val3);
+                    InstrXBWB((parm&0xFF)+reg*16,val2,val,val3);
                 }
             }
             else if (reg < 0)
             {
-                XInstr4W(parm+0x30,val2,val);
+                InstrXBW(parm+0x30,val2,val);
             }
             else
             {
-                if (known && typ == o_BCLR && 0 <= val && val <= 255) XInstr3(parm+0x1700+reg*16,val2,val);
-                                                                 else XInstr4W(parm+reg*16,val2,val);
+                if (known && typ == o_BCLR && 0 <= val && val <= 255) InstrXBB(parm+0x1700+reg*16,val2,val);
+                                                                 else InstrXBW(parm+       reg*16,val2,val);
             }
             break;
 
@@ -766,8 +631,8 @@ int DoCPUOpcode(int typ, int parm)
             if (token == '#' && typ != o_STX)
             {
                 val=Eval();
-                if (typ == o_LDX) XInstr3W(parm+0x3730-0x40,val);
-                             else XInstr3W(parm+0x3730,val);
+                if (typ == o_LDX) InstrXW(parm+0x3730-0x40,val);
+                             else InstrXW(parm+0x3730,val);
             }
             else
             {
@@ -776,12 +641,12 @@ int DoCPUOpcode(int typ, int parm)
                 reg = GetIndex();
                 if (reg < 0)    // no index register
                 {
-                    XInstr3W(parm+0x1730,val);
+                    InstrXW(parm+0x1730,val);
                 }
                 else
                 {
-                    if (evalKnown && 0 <= val && val <= 255) Instr2(parm + reg*16,val);
-                                                        else XInstr3W(parm + 0x1700 + reg*16,val);
+                    if (evalKnown && 0 <= val && val <= 255) InstrXB(parm+       reg*16,val);
+                                                        else InstrXW(parm+0x1700+reg*16,val);
                 }
             }
             break;
@@ -796,9 +661,9 @@ int DoCPUOpcode(int typ, int parm)
             val=Eval();
             reg=GetIndex();
             if (reg < 0)    // no index register
-                XInstr3W(0x7A+(parm & 0x80),val);
+                InstrXW(0x7A+(parm & 0x80),val);
             else
-                XInstr4W(parm+reg*16,(val >> 16) & 0x0F,val);
+                InstrX3(parm+reg*16,val & 0xFFFFF); // 20-bit address
             break;
 
         case o_STD:
@@ -825,15 +690,15 @@ int DoCPUOpcode(int typ, int parm)
             if (token == '#' && typ != o_StoreAB && typ != o_STD)
             {
                 val=Eval();
-                if (evalKnown && typ == o_ADDD && -128 <= val && val <= 127)       Instr2(0xFC,val);
-                else if (evalKnown && typ == o_Arith && -128 <= val && val <= 127) XInstr2(parm+0x30,val);
-                                                                              else XInstr3W(parm+0x30,val);
+                if      (evalKnown && typ == o_ADDD  && -128 <= val && val <= 127) InstrXB(            0xFC,val);
+                else if (evalKnown && typ == o_Arith && -128 <= val && val <= 127) InstrXB((parm&0xFF)+0x30,val);
+                                                                              else InstrXW( parm      +0x30,val);
             }
             else if (word[0]=='E' && word[1]==0)
             {
                 reg=GetIndex();
                 if (reg < 0) BadMode();
-                        else XInstr1((parm & 0xFF) + 0x2700 + reg*16);
+                        else InstrX((parm & 0xFF) + 0x2700 + reg*16);
             }
             else
             {
@@ -843,176 +708,52 @@ int DoCPUOpcode(int typ, int parm)
                 if (reg < 0)    // no index register
                 {
                     if (typ == o_ArithW || typ == o_ADDD || typ == o_STD)
-                        XInstr3W(parm+0x70,val);
+                        InstrXW(parm+0x70,val);
                     else
-                        XInstr3W(parm+0x30,val);
+                        InstrXW(parm+0x30,val);
                 }
                 else
                 {
                     if (evalKnown && 0 <= val && val <= 255)
-                        Instr2(parm + reg*16,val);
+                        InstrXB((parm & 0xFF) + reg*16,val);
                     else if (typ == o_ArithW || typ == o_ADDD || typ == o_STD)
-                        XInstr3W(parm + 0x40 + reg*16,val);
+                        InstrXW(parm + 0x40 + reg*16,val);
                     else
-                        XInstr3W(parm + reg*16,val);
+                        InstrXW(parm + reg*16,val);
                 }
             }
             break;
 
-/*
-		case o_Bit:
-			if (cpu != cpu_68HC11) return 0;
-
-			val = Eval();   // direct page address or offset
-			reg = 0;
-
-			oldLine = linePtr;  // if comma present, may signal ,X or ,Y
-			if (GetWord(word) == ',')
-			{
-				oldLine = linePtr;
-				GetWord(word);
-				if (word[1] == 0 && (word[0] == 'X' || word[0] == 'Y'))
-				{
-					reg = word[0];
-
-					oldLine = linePtr;  // eat optional comma after ,X or ,Y
-					if (GetWord(word) != ',')
-						linePtr = oldLine;
-				}
-				else linePtr = oldLine; // not ,X or ,Y so reposition to after comma
-			}
-			else linePtr = oldLine; // optional comma not present, bit comes next
-
-
-
-			val2 = Eval();  // mask
-
-			switch(reg)
-			{
-				case 'X':
-					XInstr3(parm + 0x1C, val, val2);
-					break;
-
-				case 'Y':
-					XInstr3(parm + 0x181C, val, val2);
-					break;
-
-				default:
-					XInstr3(parm + 0x14, val, val2);
-					break;
-
-			}
-			break;
-
-		case o_BRelative:
-			if (cpu != cpu_68HC11) return 0;
-
-			val = Eval();   // direct page address or offset
-			reg = 0;
-
-			oldLine = linePtr;  // if comma present, may signal ,X or ,Y
-			if (GetWord(word) == ',')
-			{
-				oldLine = linePtr;;
-				GetWord(word);
-				if (word[1] == 0 && (word[0] == 'X' || word[0] == 'Y'))
-				{
-					reg = word[0];
-
-					oldLine = linePtr;  // eat optional comma after ,X or ,Y
-					if (GetWord(word) != ',')
-						linePtr = oldLine;
-				}
-				else linePtr = oldLine; // not ,X or ,Y so reposition to after comma
-			}
-			else linePtr = oldLine; // optional comma not present, bit comes next
-
-			val2 = Eval();  // bit mask
-
-			oldLine = linePtr;  // eat optional comma after bit mask
-			if (GetWord(word) != ',')
-				linePtr = oldLine;
-
-			val3 = EvalBranch(4 + (reg == 'Y'));  // offset
-
-			switch(reg)
-			{
-				case 'X':
-					XInstr4(parm + 0x1E, val, val2, val3);
-					break;
-
-				case 'Y':
-					XInstr4(parm + 0x181E, val, val2, val3);
-					break;
-
-				default:
-					XInstr4(parm + 0x12, val, val2, val3);
-					break;
-			}
-			break;
-
-		case o_Processor:
-			if (GetWord(word))
-			{
-					 if (strcmp(word,"6800") == 0) cpu = cpu_6800;
-				else if (strcmp(word,"6801") == 0) cpu = cpu_6801;
-				else if (strcmp(word,"6802") == 0) cpu = cpu_6800;
-				else if (strcmp(word,"6803") == 0) cpu = cpu_6801;
-				else if (strcmp(word,"6808") == 0) cpu = cpu_6801;
-
-				else if (strcmp(word,"6303") == 0) cpu = cpu_6303;
-
-				else if (strcmp(word,"6811"   ) == 0) cpu = cpu_68HC11;
-				else if (strcmp(word,"68HC11" ) == 0) cpu = cpu_68HC11;
-				else if (strcmp(word,"68HC711") == 0) cpu = cpu_68HC11;
-				else if (strcmp(word,"68HC811") == 0) cpu = cpu_68HC11;
-				else if (strcmp(word,"68HC99" ) == 0) cpu = cpu_68HC11;
-				else								Error("Illegal option");				
-			}
-			else Error("Missing operand");
-			break;
-
-		case o_CPUtype:
-			cpu = parm;
-			break;
-*/
-		default:
-			return 0;
-			break;
-	}
+        default:
+            return 0;
+            break;
+    }
     return 1;
 }
 
 
 int DoCPULabelOp(int typ, int parm, char *labl)
 {
-//	int		i,val;
-//	Str255  word;
+//  int     i,val;
+//  Str255  word;
 
-	switch(typ)
-	{
-		default:
-			return 0;
-			break;
-	}
+    switch(typ)
+    {
+        default:
+            return 0;
+            break;
+    }
     return 1;
-}
-
-
-void usage(void)
-{
-	stdversion();
-	stdusage();
-	exit(1);
 }
 
 
 void PassInit(void)
 {
-//	cpu = cpu_68HC11;
+//  cpu = cpu_68HC11;
 }
 
 
 void AsmInit(void)
 {
+    endian = BIG_END;
 }

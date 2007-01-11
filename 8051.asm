@@ -210,7 +210,7 @@ ad16    equ     $1234
         CJNE    R6,#imm,.; BE imm rel
         CJNE    R7,#imm,.; BF imm rel
 
-        PUSH    dir     ; C0
+        PUSH    dir     ; C0 dir
         AJMP    $06C1   ; C1 xx
         CLR     bit.b   ; C2 bit
         CLR     C       ; C3
@@ -227,7 +227,7 @@ ad16    equ     $1234
         XCH     A,R6    ; CE
         XCH     A,R7    ; CF
 
-        POP     dir     ; D0
+        POP     dir     ; D0 dir
         ACALL   $06D1   ; D1 xx
         SETB    bit.b   ; D2 bit
         SETB    C       ; D3
