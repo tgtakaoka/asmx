@@ -1,8 +1,7 @@
 // asmf8.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "Fairchild F8 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum
 {
@@ -19,9 +18,9 @@ enum
 //  o_Foo = o_LabelOp,
 };
 
-const char regs[] = "A W J H K Q KU KL QU QL IS DC0 PC0 PC1 DC P0 P1 P";
+const char F8_regs[] = "A W J H K Q KU KL QU QL IS DC0 PC0 PC1 DC P0 P1 P";
 
-enum regType    // these are keyed to regs[] above
+enum regType    // these are keyed to F8_regs[] above
 {
     reg_0,          // 0..15 = scratchpad registers
     reg_A = 16,     // 16 - accumulator
@@ -44,7 +43,7 @@ enum regType    // these are keyed to regs[] above
     reg_P           // 33 - alias for PC1
 };
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec F8_opcdTab[] =
 {
     {"PK",  o_None,     0x0C},
     {"LM",  o_None,     0x16},
@@ -177,7 +176,7 @@ int Get_F8_Reg(void)
     token = GetWord(word);
 
     // handle the random special registers
-    reg = FindReg(word,regs);
+    reg = FindReg(word,F8_regs);
     if (reg >= 0) return reg + reg_A;
 
     // handle special names for registers 10-14
@@ -200,7 +199,7 @@ int Get_F8_Reg(void)
 }
 
 
-int DoCPUOpcode(int typ, int parm)
+int F8_DoCPUOpcode(int typ, int parm)
 {
     int     val;
     int     reg1;
@@ -365,7 +364,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int F8_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i,val;
 //  Str255  word;
@@ -380,12 +379,16 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void F8_PassInit(void)
 {
 }
 
 
-void AsmInit(void)
+void AsmF8Init(void)
 {
-    endian = BIG_END;
+    char *p;
+
+    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, F8_opcdTab,
+               &F8_DoCPUOpcode, &F8_DoCPULabelOp, &F8_PassInit);
+    AddCPU(p, "F8", 0);
 }

@@ -1,8 +1,7 @@
 // asm6502.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "6502 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum
 {
@@ -18,16 +17,13 @@ enum
     o_RSMB,         // RMBn/SMBn instructions for 65C02 only
     o_BBRS,         // BBRn/BBSn instructions for 65C02 only
 
-    o_Processor, // PROCESSOR pseudo-op
-    o_CPUtype  // cpu type pseudo-ops (.6502, etc.)
-
 //  o_Foo = o_LabelOp,
 };
 
 enum cputype
 {
-    cpu_6502, cpu_65C02, cpu_6502U
-} cpu;
+    CPU_6502, CPU_65C02, CPU_6502U
+};
 
 enum addrMode
 {
@@ -171,7 +167,7 @@ const unsigned char mode2op6502[] = // [o_Max * a_Max] =
 };
 
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec M6502_opcdTab[] =
 {
     {"BRK",  o_Implied, 0x00},
     {"PHP",  o_Implied, 0x08},
@@ -236,12 +232,6 @@ struct OpcdRec opcdTab[] =
     {"CPX",  o_Mode, o_CPX},
     {"SBC",  o_Mode, o_SBC},
     {"INC",  o_Mode, o_INC},
-
-    {"PROCESSOR",o_Processor,0},
-    {"CPU",      o_Processor,0},
-    {".6502",    o_CPUtype,cpu_6502},
-    {".65C02",   o_CPUtype,cpu_65C02},
-    {".6502U",   o_CPUtype,cpu_6502U},
 
 // 65C02 opcodes
 
@@ -319,7 +309,7 @@ struct OpcdRec opcdTab[] =
 // --------------------------------------------------------------
 
 
-int DoCPUOpcode(int typ, int parm)
+int M6502_DoCPUOpcode(int typ, int parm)
 {
     int     val;
     int     i;
@@ -336,34 +326,34 @@ int DoCPUOpcode(int typ, int parm)
     switch(typ)
     {
         case o_Implied_65C02:
-            if (cpu == cpu_6502) return 0;
+            if (curCPU == CPU_6502) return 0;
         case o_Implied_6502U:
-            if (typ == o_Implied_6502U && cpu != cpu_6502U) return 0;
+            if (typ == o_Implied_6502U && curCPU != CPU_6502U) return 0;
 //      case o_Implied_6502:
-//          if (typ == o_Implied_6502 && cpu != cpu_6502) return 0;
+//          if (typ == o_Implied_6502 && curCPU != CPU_6502) return 0;
         case o_Implied:
             if (parm > 256) InstrBB(parm >> 8, parm & 255);
                     else    InstrB (parm);
             break;
 
         case o_Branch_65C02:
-            if (cpu == cpu_6502) return 0;
+            if (curCPU == CPU_6502) return 0;
         case o_Branch:
             val = EvalBranch(2);
             InstrBB(parm,val);
             break;
 
         case o_Mode_6502U:
-            if (cpu != cpu_6502U) return 0;
+            if (curCPU != CPU_6502U) return 0;
         case o_Mode_65C02:
-            if (typ == o_Mode_65C02 && cpu != cpu_65C02) return 0;
+            if (typ == o_Mode_65C02 && curCPU != CPU_65C02) return 0;
         case o_Mode:
             instrLen = 0;
             oldLine = linePtr;
             token = GetWord(word);
 
-            if (cpu == cpu_65C02)   modes = mode2op65C02 + parm * a_Max;
-                            else    modes = mode2op6502  + parm * a_Max;
+            if (curCPU == CPU_65C02) modes = mode2op65C02 + parm * a_Max;
+                                else modes = mode2op6502  + parm * a_Max;
 
             mode = a_None;
             val  = 0;
@@ -526,7 +516,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_RSMB:        //    RMBn/SMBn instructions
-            if (cpu == cpu_6502) return 0;
+            if (curCPU == CPU_6502) return 0;
 
             // RMB/SMB zpg
             val = Eval();
@@ -534,28 +524,13 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_BBRS:        //    BBRn/BBSn instructions
-            if (cpu == cpu_6502)
+            if (curCPU == CPU_6502)
                 return 0; // pass the buck to get "unknown opcode"
 
             i = Eval();
             Expect(",");
             val = EvalBranch(3);
             InstrBBB(parm,i,val);
-            break;
-
-        case o_Processor:
-            if (GetWord(word))
-            {
-                     if (strcmp(word,"6502")  == 0) cpu = cpu_6502;
-                else if (strcmp(word,"65C02") == 0) cpu = cpu_65C02;
-                else if (strcmp(word,"6502U") == 0) cpu = cpu_6502U;
-                else                                Error("Illegal option");                
-            }
-            else MissingOperand();
-            break;
-
-        case o_CPUtype:
-            cpu = parm;
             break;
 
         default:
@@ -566,7 +541,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int M6502_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i,val;
 //  Str255  word;
@@ -581,13 +556,18 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void M6502_PassInit(void)
 {
-    cpu = cpu_6502;
 }
 
 
-void AsmInit(void)
+void Asm6502Init(void)
 {
-    endian = LITTLE_END;
+    char *p;
+
+    p = AddAsm(versionName, LITTLE_END, ADDR_16, LIST_24, M6502_opcdTab,
+               &M6502_DoCPUOpcode, &M6502_DoCPULabelOp, &M6502_PassInit);
+    AddCPU(p, "6502",  CPU_6502);
+    AddCPU(p, "65C02", CPU_65C02);
+    AddCPU(p, "6502U", CPU_6502U);
 }

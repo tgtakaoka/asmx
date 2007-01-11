@@ -1,8 +1,7 @@
 // asm6809.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "6809 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum
 {
@@ -20,7 +19,7 @@ enum
     o_SETDP = o_LabelOp // SETDP pseudo-op
 };
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec M6809_opcdTab[] =
 {
     {"NOP" ,  o_Inherent, 0x12},
     {"SYNC",  o_Inherent, 0x13},
@@ -407,7 +406,7 @@ void DoIndex(int idxOp, int dirOp, int extOp)
 }
 
 
-int DoCPUOpcode(int typ, int parm)
+int M6809_DoCPUOpcode(int typ, int parm)
 {
     int     val;
     int     reg1,reg2;
@@ -548,7 +547,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int M6809_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i;
     int     val;
@@ -589,13 +588,17 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void M6809_PassInit(void)
 {
     dpReg = 0;
 }
 
 
-void AsmInit(void)
+void Asm6809Init(void)
 {
-    endian = BIG_END;
+    char *p;
+
+    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, M6809_opcdTab,
+               &M6809_DoCPUOpcode, &M6809_DoCPULabelOp, &M6809_PassInit);
+    AddCPU(p, "6809",  0);
 }

@@ -1,8 +1,17 @@
 // asm8085.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "8085 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
+
+enum
+{
+    CPU_8080,
+    CPU_8085,
+    CPU_8085U
+};
+
+#define I_8085  0x100
+#define I_8085U 0x200
 
 enum instrType
 {
@@ -23,20 +32,20 @@ enum instrType
 //  o_Foo = o_LabelOp,
 };
 
-const char regs1[]      = "B C D E H L M A";
-const char regs2[]      = "B D H SP";
+const char I8085_regs1[]      = "B C D E H L M A";
+const char I8085_regs2[]      = "B D H SP";
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec I8085_opcdTab[] =
 {
     {"NOP", o_None, 0x00},
     {"RLC", o_None, 0x07},
     {"RRC", o_None, 0x0F},
     {"RAL", o_None, 0x17},
     {"RAR", o_None, 0x1F},
-    {"RIM", o_None, 0x20},
+    {"RIM", o_None, 0x20 + I_8085}, // 8085-only
     {"DAA", o_None, 0x27},
     {"CMA", o_None, 0x2F},
-    {"SIM", o_None, 0x30},
+    {"SIM", o_None, 0x30 + I_8085}, // 8085-only
     {"STC", o_None, 0x37},
     {"CMC", o_None, 0x3F},
     {"HLT", o_None, 0x76},
@@ -92,7 +101,7 @@ struct OpcdRec opcdTab[] =
 
     {"MOV", o_MOV,     0},
 
-    {"RST", o_RST,      0},
+    {"RST", o_RST,     0},
 
     {"ADD", o_Arith, 0x80},
     {"ADC", o_Arith, 0x88},
@@ -120,16 +129,16 @@ struct OpcdRec opcdTab[] =
 //  These are in most "real" 8085 versions,
 //  but are likely to not be found in VHDL cores, etc.
 
-    {"DSUB",o_None, 0x08},      // HL = HL - BC
-    {"ARHL",o_None, 0x10},      // arithmetic shift right HL
-    {"RDEL",o_None, 0x18},      // rotate DE left through carry
-    {"LDHI",o_Immediate, 0x28}, // DE = HL + imm
-    {"LDSI",o_Immediate, 0x38}, // DE = SP + imm
-    {"RSTV",o_None, 0xCB},      // call 0x40 if overflow
-    {"LHLX",o_None, 0xED},      // L = (DE), H = (DE+1)
-    {"SHLX",o_None, 0xD9},      // (DE) = L, (DE+1) = H
-    {"JNX5",o_LImmediate, 0xDD},
-    {"JX5", o_LImmediate, 0xFD},
+    {"DSUB",o_None,       0x08 + I_8085U}, // HL = HL - BC
+    {"ARHL",o_None,       0x10 + I_8085U}, // arithmetic shift right HL
+    {"RDEL",o_None,       0x18 + I_8085U}, // rotate DE left through carry
+    {"LDHI",o_Immediate,  0x28 + I_8085U}, // DE = HL + imm
+    {"LDSI",o_Immediate,  0x38 + I_8085U}, // DE = SP + imm
+    {"RSTV",o_None,       0xCB + I_8085U}, // call 0x40 if overflow
+    {"LHLX",o_None,       0xED + I_8085U}, // L = (DE), H = (DE+1)
+    {"SHLX",o_None,       0xD9 + I_8085U}, // (DE) = L, (DE+1) = H
+    {"JNX5",o_LImmediate, 0xDD + I_8085U},
+    {"JX5", o_LImmediate, 0xFD + I_8085U},
 
     {"",    o_Illegal,  0}
 };
@@ -138,7 +147,7 @@ struct OpcdRec opcdTab[] =
 // --------------------------------------------------------------
 
 
-int DoCPUOpcode(int typ, int parm)
+int I8085_DoCPUOpcode(int typ, int parm)
 {
     int     val;
     int     reg1;
@@ -149,25 +158,30 @@ int DoCPUOpcode(int typ, int parm)
 
     switch(typ)
     {
-
         case o_None:
-            if (parm > 255) InstrBB(parm >> 8, parm & 255);
-            else            InstrB (parm);
+            if ((parm & I_8085)  && curCPU == CPU_8080)  return 0;
+            if ((parm & I_8085U) && curCPU != CPU_8085U) return 0;
+
+            InstrB (parm & 255);
             break;
 
         case o_Immediate:
+            if ((parm & I_8085U) && curCPU != CPU_8085U) return 0;
+
             val = Eval();
-            InstrBB(parm,val);
+            InstrBB(parm & 0xFF,val);
             break;
 
         case o_LImmediate:
+            if ((parm & I_8085U) && curCPU != CPU_8085U) return 0;
+
             val = Eval();
             InstrBW(parm,val);
             break;
 
         case o_MOV:
             GetWord(word);
-            reg1 = FindReg(word,regs1);
+            reg1 = FindReg(word,I8085_regs1);
             if (reg1 == -1)
                 IllegalOperand();
             else
@@ -181,7 +195,7 @@ int DoCPUOpcode(int typ, int parm)
                 else
                 {
                     GetWord(word);
-                    reg2 = FindReg(word,regs1);
+                    reg2 = FindReg(word,I8085_regs1);
                     if (reg2 == -1 || (reg1 == 6 && reg2 == 6))
                         IllegalOperand();
                     else
@@ -199,7 +213,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_Arith:
             GetWord(word);
-            reg1 = FindReg(word,regs1);
+            reg1 = FindReg(word,I8085_regs1);
             if (reg1 == -1)
                 IllegalOperand();
             else
@@ -217,7 +231,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_MVI:
             GetWord(word);
-            reg1 = FindReg(word,regs1);
+            reg1 = FindReg(word,I8085_regs1);
             if (reg1 == -1)
                 IllegalOperand();
             else
@@ -238,7 +252,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_LXI:
             GetWord(word);
-            reg1 = FindReg(word,regs2);
+            reg1 = FindReg(word,I8085_regs2);
             if (reg1 == -1)
                 IllegalOperand();
             else
@@ -259,7 +273,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_INR:
             GetWord(word);
-            reg1 = FindReg(word,regs1);
+            reg1 = FindReg(word,I8085_regs1);
             if (reg1 == -1)
                 IllegalOperand();
             else
@@ -268,7 +282,7 @@ int DoCPUOpcode(int typ, int parm)
 
         case o_INX:
             GetWord(word);
-            reg1 = FindReg(word,regs2);
+            reg1 = FindReg(word,I8085_regs2);
             if (reg1 == -1)
                 IllegalOperand();
             else
@@ -292,7 +306,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int I8085_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i,val;
 //  Str255  word;
@@ -307,12 +321,18 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void I8085_PassInit(void)
 {
 }
 
 
-void AsmInit(void)
+void Asm8085Init(void)
 {
-    endian = LITTLE_END;
+    char *p;
+
+    p = AddAsm(versionName, LITTLE_END, ADDR_16, LIST_24, I8085_opcdTab,
+               &I8085_DoCPUOpcode, &I8085_DoCPULabelOp, &I8085_PassInit);
+    AddCPU(p, "8080",  CPU_8080);
+    AddCPU(p, "8085",  CPU_8085);
+    AddCPU(p, "8085U", CPU_8085U);
 }

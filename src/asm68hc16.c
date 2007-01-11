@@ -1,8 +1,7 @@
-// asm68HC11.c - copyright 1998-2007 Bruce Tomlin
+// asm68HC16.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "68HC16 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum
 {
@@ -36,10 +35,8 @@ enum
 //  o_Foo = o_LabelOp,
 };
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec M68HC16_opcdTab[] =
 {
-//  {"TEST",  o_Inherent, 0x00}, // 68HC11
-
     {"ABA",   o_Inherent, 0x370B},
     {"ABX",   o_Inherent, 0x374F},
     {"ABY",   o_Inherent, 0x375F},
@@ -347,7 +344,7 @@ int GetIndex(void)
 }
 
 
-int DoCPUOpcode(int typ, int parm)
+int M68HC16_DoCPUOpcode(int typ, int parm)
 {
     int     val,val2,val3;
     Str255  word;
@@ -474,11 +471,10 @@ int DoCPUOpcode(int typ, int parm)
                 else if (reg < 0)   // $xxxx,$yyyy
                 {
                     InstrXWW(parm+0x37FE,val,val2);
-#ifdef THREE_TAB
-                    hexSpaces = 0x14;
-#else
-                    instrLen = -instrLen; // more than 5 bytes, so use long DB listing format
-#endif
+                    if (listWid == LIST_24)
+                        hexSpaces = 0x14;
+                    else
+                        instrLen = -instrLen; // more than 5 bytes, so use long DB listing format
                 }
                 else IllegalOperand();
             }
@@ -732,7 +728,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int M68HC16_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i,val;
 //  Str255  word;
@@ -747,13 +743,16 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void M68HC16_PassInit(void)
 {
-//  cpu = cpu_68HC11;
 }
 
 
-void AsmInit(void)
+void Asm68HC16Init(void)
 {
-    endian = BIG_END;
+    char *p;
+
+    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, M68HC16_opcdTab,
+               &M68HC16_DoCPUOpcode, &M68HC16_DoCPULabelOp, &M68HC16_PassInit);
+    AddCPU(p, "68HC16", 0);
 }

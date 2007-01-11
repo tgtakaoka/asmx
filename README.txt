@@ -81,13 +81,17 @@ Anyhow, it works pretty well for what I want it to do.
 BUILDING IT
 ===========
 
-While I normally compile this using Apple's XCode development
-environment, that's completely unnecessary if all you want to do
-is use it.  All it takes is a single command to GCC to compile it
-No makefile, no autoconf, no nothing else.  For example, to
-compile the 6502 assembler, just do this:
+Version 2.0 now has a make file that should work on Unix/Linux
+type operating systems.  Just run the "make" command from the src
+sub-directory and it will create the asmx binary.  To install
+it, type "make install" and it will install to ~/bin (unless you
+change the makefile to install it somewhere else).  Symbolic links
+are generated so that each CPU assembler can be used with a
+separate command, as in version 1.
 
-  gcc asm6502.c -o asm6502
+If you can't use the make file, the simplest way is this:
+
+  gcc *.c -o asmx
 
 That's it.  Now you will probably want to copy it to your
 /usr/local/bin or ~/bin directory, but that's your choice.
@@ -104,16 +108,18 @@ whatever options you want.
 
 Here are the command line options:
 
-  -l [filename]     make a listing file, default is srcfile.lst
-  -o [filename]     make an object file, default is srcfile.hex
-                       or srcfile.s9 (if -s option specified)
-  -d label[=value]  define a label, and assign an optional
-                       value to it, default is zero
-  -e                show errors to screen
-  -w                show warnings to screen
-  -9                create S9 object code instead of Intel hex
-  -p                pipe mode: object file goes to stdout
-  --                end of options
+    --               end of options
+    -e               show errors to screen
+    -w               show warnings to screen
+    -l [filename]    make a listing file, default is srcfile.lst
+    -o [filename]    make an object file, default is srcfile.hex or srcfile.s9
+    -d label[=value] define a label, and assign an optional value
+    -s9              output object file in Motorola S9 format (16-bit address)
+    -s19             output object file in Motorola S9 format (16-bit address)
+    -s28             output object file in Motorola S9 format (24-bit address)
+    -s37             output object file in Motorola S9 format (32-bit address)
+    -c               send object code to stdout
+    -C cputype       specify default CPU type (currently 6502)
 
 Example:
 
@@ -130,9 +136,9 @@ Notes:
   file name.  It's really better to just put -l and -o first in the
   options.
 
-  The value in -d must be a number.  No expressions.
+  The value in -d must be a number.  No expressions are allowed.
 
-  The -p and -o options are incompatible.  Only the last one on the
+  The -c and -o options are incompatible.  Only the last one on the
   command line will be used.  Normal screen output (pass number, total
   errors, error messages, etc.) always goes to stderr.
 
@@ -164,8 +170,8 @@ supported unary operations are:
   H(val)       high 8 bits of val; whitespace not allowed before '('
   L(val)       low 8 bits of val; whitespace not allowed before '('
 
-NOTE: with the Z-80, (expr), H(val), and L(val) are likely to not work
-at the start of an expression because of Z-80 operand syntax.  Likewise
+NOTE: with the Z-80, (expr), H(val), and L(val) will likely not work at
+the start of an expression because of Z-80 operand syntax.  Likewise
 with the 6809, <val and >val may have special meaning at the start of
 an operand.
 
@@ -271,14 +277,35 @@ PSEUDO-OPS
 ==========
 
 These are all the opcodes that have nothing to do with the instruction
-set of the CPU.
+set of the CPU.  All pseudo-ops can be preceeded with a "." (example:
+".BYTE" works the same as "BYTE")
 
 NOTE:
   All of the data pseudo-ops like DB, DW, and DS have a limit of 1023
-  bytes of initialized data.  (This can be changed in asmguts.h if
+  bytes of initialized data.  (This can be changed in asmx.h if
   you really need it bigger.)
 
-DB / FCB / BYTE / .BYTE / DC.B
+.6502 / .68HC11 / etc.
+
+  The CPU type can be specified this way in addition to the CPU and
+  PROCESSOR pseudo-ops.
+
+ASCIC
+
+  Creates a text string preceeded by a single byte indicating the length
+  of the string.  This is equivalent to a Pascal-style string.
+
+ALIGN
+
+  This ensures that the next instruction or data will be located on a
+  power-of-two boundary.  The parameter must be a power of two (2, 4,
+  8, 16, etc.)
+
+CPU
+
+  This is an alias for PROCESSOR.
+
+DB / FCB / BYTE / DC.B
 
   Defines one or more constant bytes in the code.  You can use as many
   comma-separated values as you like.  Strings use either single or
@@ -287,23 +314,21 @@ DB / FCB / BYTE / .BYTE / DC.B
   represent a tab ("\t"), linefeed ("\n"), or carriage return ("\r")
   character.  Hex escapes ("\xFF") are also supported.
 
-ZSCII
-
-  Creates a compressed text string as per the version 1 Infocom format,
-  using only the 0x04 and 0x05 shift codes.  (The 0x03 and 0x04 shift
-  codes may be optionally supported in a future version.)  Otherwise,
-  this works exactly like the DB pseudo-op.
-
-  WARNING: using a forward-referenced value could cause phase errors!
-
-  See http://www.wolldingwacht.de/if/z-spec.html for more information
-  on the compressed text format.
-
-DW / FDB / WORD / .WORD / DC.W
+DW / FDB / WORD / DC.W
 
   Defines one or more constant 16-bit words in the code, using the
   native endian-ness of the CPU.  With the 6502, Z-80, and 8080, the
   low word comes first; with the 6809, the high word comes first.
+  Quoted text strings are padded to a multiple of two bytes.  The
+  data is not aligned to a 2-byte address.
+
+DL / LONG / DC.L
+
+  Defines one or more constant 32-bit words in the code, using the
+  native endian-ness of the CPU.  With the 6502, Z-80, and 8080, the
+  low word comes first; with the 6809, the high word comes first.
+  Quoted text strings are padded to a multiple of four bytes.  The
+  data is not aligned to a 4-byte address.
 
 DRW
 
@@ -317,15 +342,16 @@ DS / RMB / BLKB
      DS 5     ; skip 5 bytes (generates no object code)
      DS 6,"*" ; assemble 6 asterisks
 
-HEX
+   Note that no forward-reference values are allowed for the length
+   because this would cause phase errors.
 
-  Defines raw hex data.  Individual hex bytes may be separated by
-  spaces.
+ERROR
 
-  Examples:
-     HEX 123456     ; assembles to hex bytes 12, 34, and 56
-     HEX 78 9ABC DE ;  assembles to hex bytes 78, 9A, BC and DE
-     HEX 1 2 3 4    ; Error: hex chars must be in pairs
+  This prints a custom error message.
+
+EVEN
+
+  This is an alias for ALIGN 2.
 
 FCC
 
@@ -359,12 +385,6 @@ FCC
      FCC 9,TEXT;comm     <- this is 9 bytes "TEXT;comm"
      FCC 9,TEXT;comment  <- this is 9 bytes "TEXT;comm", then an error from "ent"
 
-ALIGN
-
-  This ensures that the next instruction or data will be located on a
-  power-of-two boundary.  The parameter must be a power of two (2, 4,
-  8, 16, etc.)
-
 END
 
   This marks the end of code.  After the END statement, all input is 
@@ -376,40 +396,46 @@ EQU / = / SET / :=
   a SET label is allowed to be redefined later in the source code.
   EQU and '=' are equivalent, and SET and ':=' are equivalent.
 
-ORG
+HEX
 
-  Sets the origin address of the following code.  This defaults to
-  zero at the start of each assembler pass.
+  Defines raw hexadecimal data.  Individual hex bytes may be separated by
+  spaces.
 
-RORG
+  Examples:
+     HEX 123456     ; assembles to hex bytes 12, 34, and 56
+     HEX 78 9ABC DE ;  assembles to hex bytes 78, 9A, BC and DE
+     HEX 1 2 3 4    ; Error: hexadecimal digits must be in pairs
 
-  Sets the relocated origin address of the following code.  Code
-  in the object file still goes to the same addresses that follow
-  the previous ORG, but labels and branches are handled as though
-  the code were being assembled starting at the RORG address.
+IF expr / ELSE / ELSIF expr / ENDIF
 
-REND
+  Conditional assembly.  Depending on the value in the IF statement,
+  code between it and the next ELSE / ELSIF / ENDIF, and code between
+  an ELSE and an ENDIF, may or may not be assembled.
 
-  Ends an RORG block.  A label in front of REND receives the relocated
-  address + 1 of the last relocated byte in the RORG / REND block.
+  ELSIF is the same as "ELSE" followed by "IF", only without the need
+  for an extra ENDIF.
 
-SEG / RSEG / SEG.U segment
+  Example:
+     IF .undef mode
+       ERROR mode not defined!
+     ELSIF mode = 1
+       JSR mode1
+     ELSIF mode = 2
+       JSR mode2
+     ELSE
+       ERROR Invalid value of mode!
+     ENDIF
 
-  Switches to a new code segment.  Code segments are simply different
-  sections of code which get assembled to different addresses.  They
-  remember their last location when you switch back to them.  If no 
-  segment name is specified, the null segment is used.
+  IF statements inside a macro only work inside that macro.  When
+  a macro is defined, IF statements are checked for matching ENDIF
+  statements.
 
-  At the start of each assembler pass, all segment pointers are reset
-  to zero, and the null segment becomes the current segment.
+INCLUDE filename
 
-  SEG.U is for DASM compatibility.  DASM uses SEG.U to indicate an
-  "unitialized" segment.  This is necessary because its DS pseudo-op
-  always generates data even when none is specified.  Since the DS
-  pseudo-op in this assembler normally doesn't generate any data,
-  unitialized segments aren't supported as such.
-
-  RSEG is for compatibility with vintage Atari 7800 source code.
+  This starts reading source code from the named file.  The file is
+  read once in each pass.  INCLUDE files can be nested to a maximum
+  of 10 levels.  (This can be changed in asmx.c if you really need
+  it bigger.)
 
 LIST / OPT
 
@@ -427,27 +453,6 @@ LIST / OPT
   The default is listing on, macro expansion off, data expansion on,
   symbol table on.
 
-SUB / SUBROUTINE name
-
-  This sets the scope for temporary labels beginning with a dot.
-  If no name is specified, temporary labels beginning with a dot
-  work just like the ones beginning with an '@'.
-
-  Example:
-
-               SUBROUTINE foo
-       .LABEL  NOP        ; this one becomes "FOO.LABEL"
-               SUBROUTINE bar
-       .LABEL  NOP        ; this one becomes "BAR.LABEL"
-               SUBROUTINE
-       LABEL
-       .LABEL  NOP        ; this one becomes "LABEL.LABEL"
-
-
-ERROR
-
-  This prints a custom error message.
-
 MACRO / ENDM
 
   Defines a macro.  This macro is used whenver the macro name is
@@ -455,7 +460,7 @@ MACRO / ENDM
   and replace values used inside the macro.
 
   Macro calls can be nested to a maximum of 10 levels.  (This can
-  be changed in asmguts.h if you really need it bigger.)
+  be changed in asmx.c if you really need it bigger.)
 
   Example:
      TWOBYTES  MACRO parm1, parm2     ; start recording the macro
@@ -496,60 +501,114 @@ MACRO / ENDM
   \1..\9 = nth macro parameter
   \? = unique ID per macro invocation (padded with leading zeros to five digits)
 
-IF expr / ELSE / ELSIF expr / ENDIF
+ORG
 
-  Conditional assembly.  Depending on the value in the IF statement,
-  code between it and the next ELSE / ELSIF / ENDIF, and code between
-  an ELSE and an ENDIF, may or may not be assembled.
+  Sets the origin address of the following code.  This defaults to
+  zero at the start of each assembler pass.
 
-  ELSIF is the same as "ELSE" followed by "IF", only without the need
-  for an extra ENDIF.
+PROCESSOR
+
+  This selects a specific CPU type to assemble code for.  Some assemblers
+  support multiple CPU sub-types.  Currently supported CPU types are:
+
+     1802          RCA 1802
+     6502          MOS Technology 6502
+     6502U         MOS Technology 6502 with undocumented instructions
+     65C02         Rockwell 65C02
+     6809          Motorola 6809
+     6800 6802     Motorola 6800
+     6801 6803     Motorola 6801
+     6303          Hitachi 6303 (6800 variant)
+     6811 68HC11   Motorola 68HC11 variants
+     68HC711 68HC811
+     68HC99
+     68HC16        Motorola 68HC16
+     68K 68000     Motorola 68000
+     68010         Motorola 68010
+     8051          Intel 8051 variants
+     8080          Intel 8080
+     8085          Intel 8085
+     8085U         Intel 8085 with undocumented instructions
+     F8            Fairchild F8
+     Z80           Zilog Z-80
+
+  At the start of each pass, this defaults to the assembler specified
+  in the "-C" command line option, if any, or the assembler type determined
+  from the name of the executable used on the command line.  The latter is
+  useful with soft-links when using Unix-type systems.  In that case, the
+  default assembler name can be determined by looking at the end of the
+  executable name used to invoke asmx, then selecting that CPU type.
+
+  If no default assembler is specified, the DW/WORD and DL/LONG pseudo-ops
+  will generate errors because they do not know which endian order to use.
+
+  Opcodes for the selected processor will have priority over generic
+  pseudo-ops.  However, assemblers for CPUs which have a "SET" opcode have
+  been specifically designed to pass control to the generic "SET" pseudo-op.
+
+REND
+
+  Ends an RORG block.  A label in front of REND receives the relocated
+  address + 1 of the last relocated byte in the RORG / REND block.
+
+RORG
+
+  Sets the relocated origin address of the following code.  Code
+  in the object file still goes to the same addresses that follow
+  the previous ORG, but labels and branches are handled as though
+  the code were being assembled starting at the RORG address.
+
+SEG / RSEG / SEG.U segment
+
+  Switches to a new code segment.  Code segments are simply different
+  sections of code which get assembled to different addresses.  They
+  remember their last location when you switch back to them.  If no 
+  segment name is specified, the null segment is used.
+
+  At the start of each assembler pass, all segment pointers are reset
+  to zero, and the null segment becomes the current segment.
+
+  SEG.U is for DASM compatibility.  DASM uses SEG.U to indicate an
+  "unitialized" segment.  This is necessary because its DS pseudo-op
+  always generates data even when none is specified.  Since the DS
+  pseudo-op in this assembler normally doesn't generate any data,
+  unitialized segments aren't supported as such.
+
+  RSEG is for compatibility with vintage Atari 7800 source code.
+
+SUBROUTINE / SUBR name
+
+  This sets the scope for temporary labels beginning with a dot.
+  At the start of each pass, and when this pseudo-op is used with
+  no name specified, temporary labels beginning with a dot use the
+  previous non-temporary label, just as the temporary labels
+  beginning with an '@'.
 
   Example:
-     IF .undef mode
-       ERROR mode not defined!
-     ELSIF mode = 1
-       JSR mode1
-     ELSIF mode = 2
-       JSR mode2
-     ELSE
-       ERROR Invalid value of mode!
-     ENDIF
 
-  IF statements inside a macro only work inside that macro.  When
-  a macro is defined, IF statements are checked for matching ENDIF
-  statements.
+       START
+       .LABEL  NOP        ; this becomes "START.LABEL"
+               SUBROUTINE foo
+       .LABEL  NOP        ; this becomes "FOO.LABEL"
+               SUBROUTINE bar
+       .LABEL  NOP        ; this becomes "BAR.LABEL"
+               SUBROUTINE
+       LABEL
+       .LABEL  NOP        ; this becomes "LABEL.LABEL"
 
-INCLUDE filename
+ZSCII
 
-  This starts reading source code from the named file.  The file is
-  read once in each pass.  INCLUDE files can be nested to a maximum
-  of 10 levels.  (This can be changed in asmguts.h if you really need
-  it bigger.)
+  Creates a compressed text string in the version 1 Infocom format.
+  Otherwise, this works exactly like the DB pseudo-op.  Note that this
+  will always generate a multiple of two bytes of data.
 
-There are also a few CPU-specific pseudo-ops:
+  WARNING: using a forward-referenced value could cause phase errors!
 
-PROCESSOR 6502
-PROCESSOR 65C02
-PROCESSOR 6502U
+  See http://www.wolldingwacht.de/if/z-spec.html for more information
+  on the compressed text format.
 
-  With the 6502 assembler, this selects either 6502 opcodes, 65C02
-  opcodes, or 6502 with undocumented opcodes.  It defaults to 6502
-  at the start of each assembler pass.
 
-PROCESSOR 6800 / 6801 / 6802 / 6803 / 6808 / 6303 / 68HC11
-
-  With the 68HC11 assembler, this selects an appropriate instruction
-  subset.  It defaults to 68HC11 at the start of each assembler pass.
-
-CPU
-
-  This is an alias for PROCESSOR.
-
-.6502 / .68HC11 / etc.
-
-  The CPU type can be specified this way in addition to the CPU and
-  PROCESSOR pseudo-ops.
+There is also one CPU-specific pseudo-op:
 
 SETDP value
 
@@ -1011,28 +1070,31 @@ Version 1.8 changes (2007-01-11)
 
  - - -
 
-Version 1.8.1 changes (2007-01-14)
+Version 2.0a1 changes (2007-01-11)
 
-* Fixed a bug with 68K CMP "Dn,Dn" that got the registers reversed
+* unified all assemblers into one binary
 
- - - -
+  CPU type selection is as follows:
 
-Version 1.8.2 changes (2007-03-17)
+  - if the CPU type can be determined from the executable name (either by renaming the
+    executable or creating a Unix file link to it), that becomes the default CPU type at
+    the start of each assembler pass
+  - using the CPU or PROCESSOR pseudo-op selects a new CPU type
+  - using a "." followed by the CPU type (".68000") also selects a new CPU type
+  - note that if no CPU has been selected and there is no default, the DW and DL pseudo-ops
+    will generate an error because they don't know what the current endian setting should be
+  - symbol table dump is in the widest address width used
 
-* Synced with 68K assembler in version 2.0:
-  - branches are made as short as possible if the destination is a known value
-  - EA of "(operand)" or "(operand.W)" or "(operand.L)" did not work
-  - EA of "0(An)" or "(0,An)" now assembles as "(An)" if offset contains no forward defs
-  - "TST (1)*4(A1)" didn't work but "MOVE.L (A0,D0.W),1*4(A1)" did
-  - ADD/CMP/SUB Dn,An now assembles as ADDA/CMPA/SUBA, but EA,An still reports an error
-  - "EOR Dn,Dn" did not assemble properly
-  - 68K changed absolute addressing mode range warning to errors
-  - longwords in instructions are now spaced in the listing as longwords when possible
-  - ADDI/CMPI/SUBI #imm,An now assembles as ADDA/CMPA/SUBA
-  - ADD/CMP/SUB EA,An now assembles as ADDA/CMPA/SUBA
-  - warning when branch could be shorter
+* 8080 and 8085 are now broken up in to separate CPU types along with 8085U for the
+  undocumented 8085 instructions
 
-* assembler labels in column 1 are now checked for starting with a non-numeric character
+* SUB pseudo-op alias was changed to SUBR because so many CPUs already have a SUB opcode
+
+  Current to-do list:
+
+  - need to test what happens with 32-bit symbols on 16-bit address CPUs
+    - negative symbols vs $8000-$FFFF symbols?  maybe RefSym should sign-extend from 16 bits?
+    - masking or wraparound of values for location counter?  (sign-extend locPtr as "." too?)
 
  - - -
 
@@ -1042,18 +1104,24 @@ To do:
 
 * Implement ".FOO." operators? (.SHL. .AND. .OR., etc.)
 
-* Unify all assemblers into a single binary (long term 2.0 goal).
-
-* Linkable/relocatable object code files (long term 3.0 goal).
-
 * 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
 
-* need to allow label on ENDM line:
+* see if it's possible to get labels starting with "$" compatible with $xxxx hex constants,
+  maybe in RefSym?
+
+* need to allow label on an ENDM line:
 
   STRING  MACRO   str
           DB      X\? - . - 1
           DB      str
   X\?     ENDM
+
+* add Gameboy variant to Z80 assembler?
+
+* The SUBROUTINE pseudo-op needs to be tweaked.  It should either define the subroutine name
+  as a label, or use the label on the left side of the line as the name of the subroutine.
+
+* Linkable/relocatable object code files (long term 3.0 goal).
 
  - - -
 

@@ -1,31 +1,22 @@
-// asmguts.h - copyright 1998-2007 Bruce Tomlin
+// asmx.c - copyright 1998-2007 Bruce Tomlin
 
-#include <stdio.h>
-#include <ctype.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
+#include "asmx.h"
+
+#define versionName "asmx multi-assembler"
 
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
-//#define THREE_TAB     // use three-tab data area in listings
-//#define THIRTY_TWO    // use 32-bit symbols
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
 
-#ifdef THIRTY_TWO
-#define THREE_TAB       // three-tab is required for thirty-two
-#endif
-
-#define versionNum "1.8.2"
+#define versionNum "2.0a1"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
-#define IHEX_SIZE   32          // max number of data bytes per line in intel hex format
+#define IHEX_SIZE   32          // max number of data bytes per line in hex object file
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
 const int symTabCols = 3;       // number of columns for symbol table dump
 #define MAXMACPARMS 30          // maximum macro parameters
 #define MAX_INCLUDE 10          // maximum INCLUDE nesting level
-#define MAX_BYTSTR  1024        // size of bytStr[]
+//#define MAX_BYTSTR  1024        // size of bytStr[] (moved to asmx.h)
 #define MAX_COND    256         // maximum nesting level of IF blocks
 #define MAX_MACRO   10          // maximum nesting level of MACRO invocations
-#define maxOpcdLen  11          // max opcode length (for building opcode table)
 
 #if 0
 // these should already be defined in sys/types.h (included from stdio.h)
@@ -35,28 +26,14 @@ typedef   unsigned int    u_int;
 typedef   unsigned long   u_long;
 #endif
 
+#if 0 // moved to asmx.h
 // a few useful typedefs
 typedef unsigned char  bool;    // i guess bool is a c++ thing
 //enum { FALSE, TRUE };
 const bool FALSE = 0;
 const bool TRUE  = 1;
 typedef char Str255[256];       // generic string type
-
-// --------------------------------------------------------------
-
-// forward-declaration of CPU-specific assembler routines
-
-int DoCPUOpcode(int typ, int parm);
-int DoCPULabelOp(int typ, int parm, char *labl);
-void PassInit(void);
-void AsmInit(void);
-
-// other stuff needed by the CPU-specific code:
-//      #define versionName "assembler name"
-//      set endian variable to LITTLE_END or BIG_END
-//      enums for CPU-specific opcodes (starting with 0)
-//      enums for CPU-specific opcodes (start with o_LabelOp)
-//      struct OpcdRec opcdTab[] = { {"OPCD",  o_OpcdType, 0x00}, ... {"", o_Illegal, 0} };
+#endif
 
 // --------------------------------------------------------------
 
@@ -65,11 +42,7 @@ const char      *progname;      // pointer to argv[0]
 struct SymRec
 {
     struct SymRec   *next;      // pointer to next symtab entry
-#ifdef THIRTY_TWO
     u_long          value;     // symbol value
-#else
-    u_short         value;     // symbol value
-#endif
     bool            defined;    // TRUE if defined
     bool            multiDef;   // TRUE if multiply defined
     bool            isSet;      // TRUE if defined with SET pseudo
@@ -109,17 +82,13 @@ struct SegRec
 {
     struct SegRec       *next;      // pointer to next segment
 //  bool                gen;        // FALSE to supress code output (not currently implemented)
-#ifdef THIRTY_TWO
     u_long              loc;       // locptr for this segment
     u_long              cod;       // codptr for this segment
-#else
-    u_short             loc;       // locptr for this segment
-    u_short             cod;       // codptr for this segment
-#endif
     char                name[1];    // segment name, storage = 1 + length
 } *segTab = NULL;               // pointer to first entry in macro table
 typedef struct SegRec *SegPtr;
 
+#if 0 // moved to asmx.h
 typedef char OpcdStr[maxOpcdLen+1];
 struct OpcdRec
 {
@@ -128,6 +97,7 @@ struct OpcdRec
     u_short         parm;       // opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
+#endif
 
 int             macroCondLevel;     // current IF nesting level inside a macro definition
 int             macUniqueID;        // unique ID, incremented per macro invocation
@@ -142,16 +112,36 @@ char            *macParms[MAXMACPARMS * MAX_MACRO]; // pointers to current macro
 int             macRepeat[MAX_MACRO]; // repeat count for REP pseudo-op
 #endif
 
+struct AsmRec
+{
+    struct AsmRec   *next;          // next AsmRec
+    int             endian;         // endianness for this assembler
+    int             addrWid;        // address bus witdth, ADDR_16 or ADDR_32
+    int             listWid;        // listing hex area width, LIST_16 or LIST_24
+    OpcdPtr         opcdTab;        // opcdTab[] for this assembler
+    int             (*DoCPUOpcode) (int typ, int parm);
+    int             (*DoCPULabelOp) (int typ, int parm, char *labl);
+    void            (*PassInit) (void);
+    char            name[1];        // name of this assembler
+};
+typedef struct AsmRec *AsmPtr;
+
+struct CpuRec
+{
+    struct CpuRec   *next;          // next CpuRec
+    AsmPtr          as;             // assembler for CPU type
+    int             index;          // CPU type index for assembler
+    char            name[1];        // all-uppercase name of CPU
+};
+typedef struct CpuRec *CpuPtr;
+
+// --------------------------------------------------------------
+
 SegPtr          curSeg;             // current segment
 SegPtr          nullSeg;            // default null segment
 
-#ifdef THIRTY_TWO
 u_long          locPtr;             // Current program address
 u_long          codPtr;             // Current program "real" address
-#else
-u_short         locPtr;             // Current program address
-u_short         codPtr;             // Current program "real" address
-#endif
 int             pass;               // Current assembler pass
 bool            warnFlag;           // TRUE if warning occurred this line
 bool            errFlag;            // TRUE if error occurred this line
@@ -180,15 +170,8 @@ int             instrLen;           // Current instruction length (negative to d
 u_char          bytStr[MAX_BYTSTR]; // Current instruction / buffer for long DB statements
 int             hexSpaces;          // flags for spaces in hex output for instructions
 bool            showAddr;           // TRUE to show LocPtr on listing
-#ifdef THIRTY_TWO
 u_long          xferAddr;           // Transfer address from END pseudo
-#else
-u_short         xferAddr;           // Transfer address from END pseudo
-#endif
 bool            xferFound;          // TRUE if xfer addr defined w/ END
-
-int             endian;             // 0 = little endian, 1 = big endian, -1 = undefined endian
-enum { UNKNOWN_END = -1, LITTLE_END, BIG_END };
 
 //  Command line parameters
 Str255          cl_SrcName;         // Source file name
@@ -212,20 +195,27 @@ int             nInclude;           // current include file index
 
 bool            evalKnown;          // TRUE if all operands in Eval were "known"
 
-enum
-{
-    // special register numbers for FindReg/GetReg
-    reg_EOL = -2,   // -2
-    reg_None,       // -1
-};
+AsmPtr          asmTab;             // list of all assemblers
+CpuPtr          cpuTab;             // list of all CPU types
+AsmPtr          curAsm;             // current assembler
+int             curCPU;             // current CPU index for current assembler
+
+int             endian;             // CPU endian: UNKNOWN_END, LITTLE_END, BIG_END
+int             addrWid;            // CPU address width: ADDR_16, ADDR_32
+int             listWid;            // listing hex area width: LIST_16, LIST_24
+int             addrMax;            // maximum addrWid used
+OpcdPtr         opcdTab;            // current CPU's opcode table
+Str255          defCPU;             // default CPU name
+
+// --------------------------------------------------------------
 
 enum
 {
 //  0x00-0xFF = CPU-specific opcodes
 
-    o_Illegal = 0x100,  // opcode not found in FindOpcode
+//    o_Illegal = 0x100,  // opcode not found in FindOpcode
 
-    o_DB,       // DB pseudo-op
+    o_DB = o_Illegal + 1,       // DB pseudo-op
     o_DW,       // DW pseudo-op
     o_DL,       // DL pseudo-op
     o_DWRE,     // reverse-endian DW
@@ -245,14 +235,15 @@ enum
     o_REPEND,   // REPEND pseudo-op
 #endif
     o_MacName,  // Macro name
+    o_Processor,// CPU selection pseudo-op
 
-    o_LabelOp = 0x1000,   // flag to handle opcode in DoLabelOp
+//    o_LabelOp = 0x1000,   // flag to handle opcode in DoLabelOp
 
 //  0x1000-0x10FF = CPU-specific label-ops
 
     // the following pseudo-ops handle the label field specially
-    o_EQU = o_LabelOp + 0x100,      // EQU and SET pseudo-ops
-    o_ORG,      // ORG pseudo-op
+//    o_EQU = o_LabelOp + 0x100,      // EQU and SET pseudo-ops
+    o_ORG = o_EQU + 1,      // ORG pseudo-op
     o_RORG,     // RORG pseudo-op
     o_REND,     // REND pseudo-op
     o_LIST,     // LIST pseudo-op
@@ -264,7 +255,7 @@ enum
 #endif
 
     o_SEG,      // SEG pseudo-op
-    o_SUB,      // SUBROUTINE pseudo-op
+    o_SUBR,     // SUBROUTINE pseudo-op
 
     o_IF,       // IF <expr> pseudo-op
     o_ELSE,     // ELSE pseudo-op
@@ -274,74 +265,76 @@ enum
 
 struct OpcdRec opcdTab2[] =
 {
-    {"DB",      o_DB,  0},
-    {"FCB",     o_DB,  0},
-    {"BYTE",    o_DB,  0},
-    {"DC.B",    o_DB,  0},
-    {"DFB",     o_DB,  0},
-    {"DEFB",    o_DB,  0},
+    {"DB",        o_DB,       0},
+    {"FCB",       o_DB,       0},
+    {"BYTE",      o_DB,       0},
+    {"DC.B",      o_DB,       0},
+    {"DFB",       o_DB,       0},
+    {"DEFB",      o_DB,       0},
 
-    {"DW",      o_DW,  0},
-    {"FDB",     o_DW,  0},
-    {"WORD",    o_DW,  0},
-    {"DC.W",    o_DW,  0},
-    {"DFW",     o_DW,  0},
-    {"DA",      o_DW,  0},
-    {"DEFW",    o_DW,  0},
-    {"DRW",     o_DWRE,0},
+    {"DW",        o_DW,       0},
+    {"FDB",       o_DW,       0},
+    {"WORD",      o_DW,       0},
+    {"DC.W",      o_DW,       0},
+    {"DFW",       o_DW,       0},
+    {"DA",        o_DW,       0},
+    {"DEFW",      o_DW,       0},
+    {"DRW",       o_DWRE,     0},
 
-    {"LONG",    o_DL,  0},
-    {"DL",      o_DL,  0},
-    {"DC.L",    o_DL,  0},
+    {"LONG",      o_DL,       0},
+    {"DL",        o_DL,       0},
+    {"DC.L",      o_DL,       0},
 
-    {"DS",      o_DS,    1},
-    {"DS.B",    o_DS,    1},
-    {"RMB",     o_DS,    1},
-    {"BLKB",    o_DS,    1},
-    {"DEFS",    o_DS,    1},
-    {"DS.W",    o_DS,    2},
-    {"BLKW",    o_DS,    2},
-    {"DS.L",    o_DS,    4},
-    {"HEX",     o_HEX,   0},
-    {"FCC",     o_FCC,   0},
-    {"ZSCII",   o_ZSCII, 0},
-    {"ASCIIC",  o_ASCIIC,0},
-    {"END",     o_END,   0},
-    {"ENDM",    o_ENDM,  0},
-    {"ALIGN",   o_ALIGN, 0},
-    {"EVEN",    o_ALIGN_n,2},
+    {"DS",        o_DS,       1},
+    {"DS.B",      o_DS,       1},
+    {"RMB",       o_DS,       1},
+    {"BLKB",      o_DS,       1},
+    {"DEFS",      o_DS,       1},
+    {"DS.W",      o_DS,       2},
+    {"BLKW",      o_DS,       2},
+    {"DS.L",      o_DS,       4},
+    {"HEX",       o_HEX,      0},
+    {"FCC",       o_FCC,      0},
+    {"ZSCII",     o_ZSCII,    0},
+    {"ASCIIC",    o_ASCIIC,   0},
+    {"END",       o_END,      0},
+    {"ENDM",      o_ENDM,     0},
+    {"ALIGN",     o_ALIGN,    0},
+    {"EVEN",      o_ALIGN_n,  2},
 #ifdef ENABLE_REP
-    {"REPEND",  o_REPEND,  0},
+    {"REPEND",    o_REPEND,   0},
 #endif
-    {"INCLUDE", o_Include, 0},
+    {"INCLUDE",   o_Include,  0},
+    {"PROCESSOR", o_Processor,0},
+    {"CPU",       o_Processor,0},
 
-    {"=",         o_EQU,   0},
-    {"EQU",       o_EQU,   0},
-    {":=",        o_EQU,   1},
-    {"SET",       o_EQU,   1},
-    {"DEFL",      o_EQU,   1},
-    {"ORG",       o_ORG,   0},
-    {"AORG",      o_ORG,   0},
-    {"RORG",      o_RORG,  0},
-    {"REND",      o_REND,  0},
-    {"LIST",      o_LIST,  0},
-    {"OPT",       o_OPT,   0},
-    {"ERROR",     o_ERROR, 0},
+    {"=",         o_EQU,      0},
+    {"EQU",       o_EQU,      0},
+    {":=",        o_EQU,      1},
+    {"SET",       o_EQU,      1},
+    {"DEFL",      o_EQU,      1},
+    {"ORG",       o_ORG,      0},
+    {"AORG",      o_ORG,      0},
+    {"RORG",      o_RORG,     0},
+    {"REND",      o_REND,     0},
+    {"LIST",      o_LIST,     0},
+    {"OPT",       o_OPT,      0},
+    {"ERROR",     o_ERROR,    0},
 #ifdef ENABLE_REP
-    {"REPEAT",    o_REPEAT,0},
+    {"REPEAT",    o_REPEAT,   0},
 #endif
-    {"MACRO",     o_MACRO, 0},
-    {"SEG",       o_SEG,   1},
-    {"RSEG",      o_SEG,   1},
-    {"SEG.U",     o_SEG,   0},
-    {"SUB",       o_SUB,   0},
-    {"SUBROUTINE",o_SUB,   0},
-    {"IF",        o_IF,    0},
-    {"ELSE",      o_ELSE,  0},
-    {"ELSIF",     o_ELSIF, 0},
-    {"ENDIF",     o_ENDIF, 0},
+    {"MACRO",     o_MACRO,    0},
+    {"SEG",       o_SEG,      1},
+    {"RSEG",      o_SEG,      1},
+    {"SEG.U",     o_SEG,      0},
+    {"SUBR",      o_SUBR,     0},
+    {"SUBROUTINE",o_SUBR,     0},
+    {"IF",        o_IF,       0},
+    {"ELSE",      o_ELSE,     0},
+    {"ELSIF",     o_ELSIF,    0},
+    {"ENDIF",     o_ENDIF,    0},
 
-    {"",     o_Illegal, 0}
+    {"",          o_Illegal,  0}
 };
 
 
@@ -350,6 +343,180 @@ struct OpcdRec opcdTab2[] =
 #ifdef ENABLE_REP
 void DoLine(void);          // forward declaration
 #endif
+
+// --------------------------------------------------------------
+
+// multi-assembler call vectors
+
+int DoCPUOpcode(int typ, int parm)
+{
+    if (curAsm) return curAsm->DoCPUOpcode(typ,parm);
+           else return 0;
+}
+
+
+int DoCPULabelOp(int typ, int parm, char *labl)
+{
+    if (curAsm) return curAsm->DoCPULabelOp(typ,parm,labl);
+           else return 0;
+}
+
+
+void PassInit(void)
+{
+    AsmPtr p;
+
+    // for each assembler, call PassInit
+    p = asmTab;
+    while(p)
+    {
+        p -> PassInit();
+        p = p -> next;
+    }
+}
+
+
+char *AddAsm(char *name,        // assembler name
+              int endian,       // assembler endian
+              int addrWid,      // assembler 32-bit
+              int listWid,      // listing width
+              struct OpcdRec opcdTab[],  // assembler opcode table
+              int (*DoCPUOpcode) (int typ, int parm),
+              int (*DoCPULabelOp) (int typ, int parm, char *labl),
+              void (*PassInit) (void) )
+{
+    AsmPtr p;
+
+    p = malloc(sizeof *p + strlen(name));
+
+    strcpy(p -> name, name);
+    p -> next     = asmTab;
+    p -> endian   = endian;
+    p -> addrWid  = addrWid;
+    p -> listWid  = listWid;
+    p -> opcdTab  = opcdTab;
+    p -> DoCPUOpcode  = DoCPUOpcode;
+    p -> DoCPULabelOp = DoCPULabelOp;
+    p -> PassInit = PassInit;
+
+    asmTab = p;
+
+    return (char *) p;
+}
+
+void AddCPU(char *as,           // assembler for this CPU
+            char *name,         // uppercase name of this CPU
+            int index)          // index number for this CPU
+{
+    CpuPtr p;
+
+    p = malloc(sizeof *p + strlen(name));
+
+    strcpy(p -> name, name);
+    p -> next  = cpuTab;
+    p -> as    = (AsmPtr) as;
+    p -> index = index;
+
+    cpuTab = p;
+}
+
+
+CpuPtr FindCPU(char *cpuName)
+{
+    CpuPtr p;
+
+    p = cpuTab;
+    while (p)
+    {
+        if (strcmp(cpuName,p->name) == 0)
+            return p;
+        p = p -> next;
+    }
+
+    return NULL;
+}
+
+
+void CodeFlush(void);
+// sets up curAsm and curCpu based on cpuName, returns non-zero if success
+bool SetCPU(char *cpuName)
+{
+    CpuPtr p;
+
+    p = FindCPU(cpuName);
+    if (p)
+    {
+        curCPU  = p -> index;
+        curAsm  = p -> as;
+        endian  = p -> as -> endian;
+        opcdTab = p -> as -> opcdTab;
+        addrWid = p -> as -> addrWid;
+        listWid = p -> as -> listWid;
+
+        CodeFlush();    // make a visual change in the hex object file
+
+        return 1;
+    }
+
+    return 0;
+}
+
+
+int isalphanum(char c);
+void Uprcase(char *s);
+void AsmInit(void)
+{
+    char *p;
+
+    extern void Asm1802Init(void);
+    extern void Asm6502Init(void);
+    extern void Asm68KInit(void);
+    extern void Asm6809Init(void);
+    extern void Asm68HC11Init(void);
+    extern void Asm68HC16Init(void);
+    extern void Asm8051Init(void);
+    extern void Asm8085Init(void);
+    extern void AsmF8Init(void);
+    extern void AsmZ80Init(void);
+
+    Asm1802Init();
+    Asm6502Init();
+    Asm68KInit();
+    Asm6809Init();
+    Asm68HC11Init();
+    Asm68HC16Init();
+    Asm8051Init();
+    Asm8085Init();
+    AsmF8Init();
+    AsmZ80Init();
+
+//  strcpy(defCPU,"Z80");     // hard-coded default for testing
+
+    strcpy(line,progname);
+    Uprcase(line);
+
+    // try to find the CPU name in the executable's name
+    p = line + strlen(line);    // start at end of executable name
+
+    while (p > line && isalphanum(p[-1]))
+        p--;                    // skip back to last non alpha-numeric character
+    if (!isalphanum(*p)) p++;   // advance past last non alpha-numeric character
+
+    if (p[0] == 'A' && p[1] == 'S' && p[2] == 'M')
+        p = p + 3;              // skip leading "ASM"
+
+    // for each substring, try to find a matching CPU name
+    while (*p)
+    {
+        if (FindCPU(p))
+        {
+            strcpy(defCPU,p);
+            return;
+        }
+        p++;
+    }
+}
+
 
 // --------------------------------------------------------------
 // error messages
@@ -473,13 +640,6 @@ int ishex(char c)
 {
     c = toupper(c);
     return isdigit(c) || ('A' <= c && c <= 'F');
-}
-
-
-int isalphaul(char c)
-{
-    c = toupper(c);
-    return ('A' <= c && c <= 'Z') || c == '_';
 }
 
 
@@ -694,11 +854,10 @@ char * ListLong(char *p, u_long l)
 
 char * ListAddr(char *p,u_long addr)
 {
-#ifdef THIRTY_TWO // you need THREE_TAB with this too
-    p = ListLong(p,addr);
-#else
-    p = ListWord(p,addr);
-#endif
+    if (addrWid == ADDR_32) // you need listWid == LIST_24 with this too
+        p = ListLong(p,addr);
+    else
+        p = ListWord(p,addr);
 
     return p;
 }
@@ -709,11 +868,8 @@ char * ListLoc(u_long addr)
 
     p = ListAddr(listLine,addr);
     *p++ = ' ';
-#ifdef THREE_TAB
-#ifndef THIRTY_TWO
-    *p++ = ' ';
-#endif
-#endif
+    if (listWid == LIST_24 && addrWid != ADDR_32)
+        *p++ = ' ';
 
     return p;
 }
@@ -1555,16 +1711,14 @@ bool FindOpcodeTab(OpcdPtr p, char *name, int *typ, int *parm)
 
 void FindOpcode(char *name, int *typ, int *parm, MacroPtr *macro)
 {
-//    extern OpcdPtr opcdTab;
-    extern struct OpcdRec opcdTab[];
-
     *typ   = o_Illegal;
     *parm  = 0;
     *macro = NULL;
 
-    if (FindOpcodeTab((OpcdPtr) &opcdTab,  name, typ, parm)) return;
+    if (opcdTab && FindOpcodeTab(opcdTab,  name, typ, parm)) return;
     if (name[0] == '.') name++; // allow pseudo-ops to be invoked as ".OP"
     if (FindOpcodeTab((OpcdPtr) &opcdTab2, name, typ, parm)) return;
+// if name[0] == '.' try calling SetCPU
 
     *macro = FindMacro(name);
     if (*macro)
@@ -1644,6 +1798,10 @@ int RefSym(char *symName, bool *known)
                 if (!p -> known) *known = FALSE;
                 break;
         }
+#if 0 // FIXME: possible fix that may be needed for 16-bit address
+        if (addrWid == ADDR_16)
+            return (short) p -> value;    // sign-extend from 16 bits
+#endif
         return p -> value;
     }
 
@@ -1679,11 +1837,7 @@ int RefSym(char *symName, bool *known)
  *  DefSym
  */
 
-#ifdef THIRTY_TWO
 void DefSym(char *symName, u_long val, bool setSym, bool equSym)
-#else
-void DefSym(char *symName, u_short val, bool setSym, bool equSym)
-#endif
 {
     SymPtr p;
     Str255 s;
@@ -1748,11 +1902,10 @@ void DumpSym(SymPtr p, char *s, int *w)
         n++;
     }
 
-#ifdef THIRTY_TWO
-    sprintf(s, "%.8lX ", p->value);
-#else
-    sprintf(s, "%.4X ", p->value);
-#endif
+    if (addrMax == ADDR_32)
+        sprintf(s, "%.8lX ", p->value);
+    else
+        sprintf(s, "%.4lX ", p->value & 0xFFFF);
 
     s = s + strlen(s);
 
@@ -1893,6 +2046,10 @@ int Factor(void)
             // fall-through...
         case '*':
             val = locPtr;
+#if 0 // FIXME: possible fix that may be needed for 16-bit address
+        if (addrWid == ADDR_16)
+            val = (short) val;            // sign-extend from 16 bits
+#endif
             break;
 
         case '+':
@@ -1930,7 +2087,7 @@ int Factor(void)
             break;
 
         case 0x27:  // single quote
-#if 1
+#if 1 // enable multi-char single-quote constants
             val = 0;
             while (*linePtr != 0x27 && *linePtr != 0)
             {
@@ -1998,6 +2155,10 @@ int Factor(void)
             {
                 linePtr = oldLine;
                 val = locPtr;
+#if 0 // FIXME: possible fix that may be needed for 16-bit address
+                if (addrWid == ADDR_16)
+                    val = (short) val;    // sign-extend from 16 bits
+#endif
                 break;
             }
 
@@ -2260,9 +2421,7 @@ int EvalLBranch(int instrLen)
     u_long ihex_len;   // length of current intel hex line
     u_long ihex_base;  // current address in intel hex buffer
     u_long ihex_addr;  // start address of current intel hex line
-#ifdef THIRTY_TWO
     u_short ihex_page;
-#endif
 
 // Intel hex format:
 //
@@ -2292,7 +2451,6 @@ void write_ihex(u_long addr, u_char *buf, int len, int rectype)
 
     if (cl_Obj || cl_Stdout)
     {
-#ifdef THIRTY_TWO
         if (rectype == 1 && (addr & 0xFFFF0000))
             write_ihex(addr >> 16, buf, 0, 5);
         if (rectype == 0 && (addr >> 16) != ihex_page)
@@ -2300,7 +2458,7 @@ void write_ihex(u_long addr, u_char *buf, int len, int rectype)
             write_ihex(addr >> 16, buf, 0, 4);
             ihex_page = addr >> 16;
         }
-#endif
+
         chksum = len + (addr >> 8) + addr + rectype;
         fprintf(object,":%.2X%.4lX%.2X",len,addr & 0xFFFF,rectype);
         for (i=0; i<len; i++)
@@ -2382,9 +2540,7 @@ void CodeInit(void)
     ihex_len  = 0;
     ihex_base = 0;
     ihex_addr = 0;
-#ifdef THIRTY_TWO
     ihex_page = 0;
-#endif
 }
 
 
@@ -2947,11 +3103,10 @@ void CopyListLine(void)
 //  strcpy(listLine, "                ");       // 16 blanks
 //  strncat(listLine, line, 255-16);
 
-#ifdef THREE_TAB
-    for (n=24; n; n--) *p++ = ' ';  // 24 blanks at start of line
-#else
-    for (n=16; n; n--) *p++ = ' ';  // 16 blanks at start of line
-#endif
+    if (listWid == LIST_24)
+        for (n=24; n; n--) *p++ = ' ';  // 24 blanks at start of line
+    else
+        for (n=16; n; n--) *p++ = ' ';  // 16 blanks at start of line
 
     while (n < 255-16 && (c = *q++))    // copy rest of line, stripping out form feeds
     {
@@ -3584,6 +3739,11 @@ void DoOpcode(int typ, int parm)
             break;
 #endif
 
+        case o_Processor:
+            if (!GetWord(word)) MissingOperand();
+            else if (!SetCPU(word)) IllegalOperand();
+            break;
+
         default:
             Error("Unknown opcode");
             break;
@@ -3620,15 +3780,15 @@ void DoLabelOp(int typ, int parm, char *labl)
 
                 // "XXXX  (XXXX)"
                 p = listLine;
-#ifdef THIRTY_TWO
-                for (i = 0; i <= 8; i++) *p++ = ' ';
-#else
-#ifdef THREE_TAB
-                for (i = 0; i <= 5; i++) *p++ = ' ';
-#else
-                for (i = 0; i <= 4; i++) *p++ = ' ';
-#endif
-#endif
+                if (addrWid == ADDR_32)
+                    for (i = 0; i <= 8; i++) *p++ = ' ';
+                else
+                {
+                    if (listWid == LIST_24)
+                        for (i = 0; i <= 5; i++) *p++ = ' ';
+                    else
+                        for (i = 0; i <= 4; i++) *p++ = ' ';
+                }
                 *p++ = '=';
                 *p++ = ' ';
                 p = ListAddr(p,val);
@@ -3672,7 +3832,7 @@ void DoLabelOp(int typ, int parm, char *labl)
             }
             break;
 
-        case o_SUB:
+        case o_SUBR:
             token = GetWord(word);  // get subroutine name
             strcpy(subrLabl,word);
             break;
@@ -4131,7 +4291,7 @@ void DoLine()
 
     // look for label at beginning of line
     labl[0] = 0;
-    if (isalphaul(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
+    if (isalphanum(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
     {
         token = GetWord(labl);
         oldLine = linePtr;
@@ -4241,8 +4401,13 @@ void DoLine()
 
             if (typ == o_Illegal)
             {
-                sprintf(word,"Illegal opcode '%s'",opcode);
-                Error(word);
+                if (opcode[0] == '.' && SetCPU(opcode+1))
+                    /* successfully changed CPU type */;
+                else
+                {
+                    sprintf(word,"Illegal opcode '%s'",opcode);
+                    Error(word);
+                }
             }
             else if (typ == o_MacName)
             {
@@ -4290,50 +4455,48 @@ void DoLine()
             if (showAddr) p = ListLoc(locPtr);
             else
             {
-#ifdef THIRTY_TWO
-                p = listLine + 9;
-#else
-                p = listLine + 5;
-#endif
+                if (addrWid == ADDR_32)
+                    p = listLine + 9;
+                else
+                    p = listLine + 5;
             }
-#ifdef THREE_TAB
-#ifdef THIRTY_TWO
-            numhex = 6;
-#else
-            numhex = 8;
-#endif
-#else
-            numhex = 5;
-#endif
-#if 1 // positive vs negative instrLen distinction is deprecated
-            if (instrLen>0)
+            if (listWid == LIST_24)
             {
-#ifdef THIRTY_TWO
-                p = listLine + 9;
-#else
-#ifdef THREE_TAB
-                p = listLine + 6;
-#else
-                p = listLine + 5;
-#endif
-#endif
+                if (addrWid == ADDR_32)
+                    numhex = 6;
+                else
+                    numhex = 8;
+            }
+            else
+                numhex = 5;
+
+            if (instrLen>0) // positive instrLen for CPU instruction formatting
+            {
+                if (addrWid == ADDR_32)
+                    p = listLine + 9;
+                else
+                {
+                    if (listWid == LIST_24)
+                        p = listLine + 6;
+                    else
+                        p = listLine + 5;
+                }
                 if (hexSpaces & 1) { *p++ = ' '; }
                 for (i = 0; i < instrLen; i++)
                 {
-#ifdef THREE_TAB
-                    if (hexSpaces & (1<<i)) *p++ = ' ';
-#endif
+                    if (listWid == LIST_24)
+                        if (hexSpaces & (1<<i)) *p++ = ' ';
+
                     if (i<numhex || expandHexFlag)
                     {
                         if (i > 0 && i % numhex == 0)
                         {
                             if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
                                 ListOut();
-#ifdef THREE_TAB
-                            strcpy(listLine, "                        ");   // 24 blanks
-#else
-                            strcpy(listLine, "                ");           // 16 blanks
-#endif
+                            if (listWid == LIST_24)
+                                strcpy(listLine, "                        ");   // 24 blanks
+                            else
+                                strcpy(listLine, "                ");           // 16 blanks
                             p = ListLoc(locPtr);
                         }
 
@@ -4342,8 +4505,7 @@ void DoLine()
                     CodeOut(bytStr[i]);
                 }
             }
-            else if (instrLen<0)
-#endif
+            else if (instrLen<0) // negative instrLen for generic data formatting
             {
                 instrLen = abs(instrLen);
                 for (i = 0; i < instrLen; i++)
@@ -4354,11 +4516,10 @@ void DoLine()
                         {
                             if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
                                 ListOut();
-#ifdef THREE_TAB
-                            strcpy(listLine, "                        ");   // 24 blanks
-#else
-                            strcpy(listLine, "                ");           // 16 blanks
-#endif
+                            if (listWid == LIST_24)
+                                strcpy(listLine, "                        ");   // 24 blanks
+                            else
+                                strcpy(listLine, "                ");           // 16 blanks
                             p = ListLoc(locPtr);
                         }
                         if (numhex == 6 && (i%numhex) == 2) *p++ = ' ';
@@ -4405,6 +4566,13 @@ void DoPass()
     macLevel      = 0;
     macUniqueID   = 0;
     macCurrentID[0] = 0;
+    curAsm        = NULL;
+    endian        = UNKNOWN_END;
+    opcdTab       = NULL;
+    listWid       = LIST_24;
+    addrWid       = ADDR_32;
+    addrMax       = addrWid;
+    SetCPU(defCPU);
 
     // reset all code pointers
     CodeAbsOrg(0);
@@ -4480,30 +4648,34 @@ void usage(void)
     fprintf(stderr,"    %s [options] srcfile\n",progname);
     fprintf(stderr,"\n");
     fprintf(stderr,"Options:\n");
-    fprintf(stderr,"    --             end of options\n");
-    fprintf(stderr,"    -e             show errors to screen\n");
-    fprintf(stderr,"    -w             show warnings to screen\n");
-    fprintf(stderr,"    -l [filename]  make a listing file, default is srcfile.lst\n");
-    fprintf(stderr,"    -o [filename]  make an object file, default is srcfile.hex or srcfile.s9\n");
-    fprintf(stderr,"    -d label[=val] define a label, and assign an optional value\n");
-//  fprintf(stderr,"    -9             output object file in Motorola S9 format (16-bit addr)\n");
-    fprintf(stderr,"    -s9            output object file in Motorola S9 format (16-bit addr)\n");
-    fprintf(stderr,"    -s19           output object file in Motorola S9 format (16-bit addr)\n");
-    fprintf(stderr,"    -s28           output object file in Motorola S9 format (24-bit addr)\n");
-    fprintf(stderr,"    -s37           output object file in Motorola S9 format (32-bit addr)\n");
-    fprintf(stderr,"    -c             send object code to stdout\n");
+    fprintf(stderr,"    --               end of options\n");
+    fprintf(stderr,"    -e               show errors to screen\n");
+    fprintf(stderr,"    -w               show warnings to screen\n");
+    fprintf(stderr,"    -l [filename]    make a listing file, default is srcfile.lst\n");
+    fprintf(stderr,"    -o [filename]    make an object file, default is srcfile.hex or srcfile.s9\n");
+    fprintf(stderr,"    -d label[=value] define a label, and assign an optional value\n");
+//  fprintf(stderr,"    -9               output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr,"    -s9              output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr,"    -s19             output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr,"    -s28             output object file in Motorola S9 format (24-bit address)\n");
+    fprintf(stderr,"    -s37             output object file in Motorola S9 format (32-bit address)\n");
+    fprintf(stderr,"    -c               send object code to stdout\n");
+    fprintf(stderr,"    -C cputype       specify default CPU type (currently ");
+    if (defCPU[0]) fprintf(stderr,"%s",defCPU);
+              else fprintf(stderr,"no default");
+    fprintf(stderr,")\n");
     exit(1);
 }
 
 
 void getopts(int argc, char * const argv[])
 {
-    int ch;
-    int val;
-    Str255 labl,word;
-    int neg;
+    int     ch;
+    int     val;
+    Str255  labl,word;
+    int     neg;
 
-    while ((ch = getopt(argc, argv, "ew9cd:l:o:s:?")) != -1)
+    while ((ch = getopt(argc, argv, "ew9cd:l:o:s:C:?")) != -1)
     {
         switch (ch)
         {
@@ -4577,6 +4749,13 @@ void getopts(int argc, char * const argv[])
                 strncpy(cl_ObjName, optarg, 255);
                 break;
 
+            case 'C':
+                strncpy(word, optarg, 255);
+                Uprcase(word);
+                if (FindCPU(word))
+                    strcpy(defCPU, word);
+                break;
+
             case '?':
             default:
                 usage();
@@ -4639,12 +4818,15 @@ int main (int argc, char * const argv[])
     segTab     = NULL;
     nullSeg    = AddSeg("");
     curSeg     = nullSeg;
-    endian     = UNKNOWN_END;
 
     cl_Err     = FALSE;
     cl_Warn    = FALSE;
     cl_List    = FALSE;
     cl_Obj     = FALSE;
+
+    asmTab     = NULL;
+    cpuTab     = NULL;
+    defCPU[0]  = 0;
 
     nInclude  = -1;
     for (i=0; i<MAX_INCLUDE; i++)
@@ -4653,6 +4835,8 @@ int main (int argc, char * const argv[])
     cl_SrcName [0] = 0;     source  = NULL;
     cl_ListName[0] = 0;     listing = NULL;
     cl_ObjName [0] = 0;     object  = NULL;
+
+    AsmInit();
 
     getopts(argc, argv);
 
@@ -4696,7 +4880,6 @@ int main (int argc, char * const argv[])
     }
 
     CodeInit();
-    AsmInit();
 
     pass = 1;
     DoPass();

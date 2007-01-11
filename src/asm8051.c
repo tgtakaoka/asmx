@@ -1,8 +1,7 @@
 // asm8051.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "8051 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum instrType
 {
@@ -30,7 +29,7 @@ enum instrType
 //  o_Foo = o_LabelOp,
 };
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec I8051_opcdTab[] =
 {
     {"NOP",  o_None,  0x00},
     {"RET",  o_None,  0x22},
@@ -167,7 +166,7 @@ int EvalBitReg()
     return val1;
 }
 
-int DoCPUOpcode(int typ, int parm)
+int I8051_DoCPUOpcode(int typ, int parm)
 {
     int     val;
     int     reg1;
@@ -886,7 +885,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int I8051_DoCPULabelOp(int typ, int parm, char *labl)
 {
     int     i,val,val2;
     char    *oldLine;
@@ -940,12 +939,16 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void I8051_PassInit(void)
 {
 }
 
 
-void AsmInit(void)
+void Asm8051Init(void)
 {
-    endian = LITTLE_END;
+    char *p;
+
+    p = AddAsm(versionName, LITTLE_END, ADDR_16, LIST_24, I8051_opcdTab,
+               &I8051_DoCPUOpcode, &I8051_DoCPULabelOp, &I8051_PassInit);
+    AddCPU(p, "8051", 0);
 }

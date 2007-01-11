@@ -1,8 +1,7 @@
 // asm68HC11.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "68HC11 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum
 {
@@ -20,18 +19,15 @@ enum
     o_LArith_01,    // o_Arith instructions with 16-bit immediate modes, 6801/6803/6811
     o_LArith_11,    // o_Arith instructions with 16-bit immediate modes, 6811 only
 
-    o_Processor,// PROCESSOR pseudo-op
-    o_CPUtype,  // cpu type pseudo-ops (.6502, etc.)
-
 //  o_Foo = o_LabelOp,
 };
 
 enum cputype
 {
-    cpu_6800, cpu_6801, cpu_68HC11, cpu_6303
-} cpu;
+    CPU_6800, CPU_6801, CPU_68HC11, CPU_6303
+};
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec M68HC11_opcdTab[] =
 {
     {"TEST",  o_Inherent_11, 0x00}, // 68HC11
     {"NOP",   o_Inherent,    0x01},
@@ -186,20 +182,6 @@ struct OpcdRec opcdTab[] =
     {"EIM", o_Bit_03, 0x65},
     {"TIM", o_Bit_03, 0x6B},
 
-    {"PROCESSOR",o_Processor,0},
-    {"CPU",      o_Processor,0},
-    {".6800",    o_CPUtype,cpu_6800},
-    {".6801",    o_CPUtype,cpu_6801},
-    {".6802",    o_CPUtype,cpu_6800},
-    {".6803",    o_CPUtype,cpu_6801},
-    {".6808",    o_CPUtype,cpu_6801},
-    {".6303",    o_CPUtype,cpu_6303},
-    {".6811",    o_CPUtype,cpu_68HC11},
-    {".68HC11",  o_CPUtype,cpu_68HC11},
-    {".68HC711", o_CPUtype,cpu_68HC11},
-    {".68HC811", o_CPUtype,cpu_68HC11},
-    {".68HC99",  o_CPUtype,cpu_68HC11},
-
     {"",     o_Illegal, 0}
 };
 
@@ -207,7 +189,7 @@ struct OpcdRec opcdTab[] =
 // --------------------------------------------------------------
 
 
-int DoCPUOpcode(int typ, int parm)
+int M68HC11_DoCPUOpcode(int typ, int parm)
 {
     int     val,val2,val3;
     Str255  word;
@@ -219,19 +201,19 @@ int DoCPUOpcode(int typ, int parm)
     switch(typ)
     {
         case o_Inherent_01: // implied instructions, 6801/6803/6811
-            if (typ == o_Inherent_01 && cpu == cpu_6800) return 0;
+            if (typ == o_Inherent_01 && curCPU == CPU_6800) return 0;
         case o_Inherent_03: // implied instructions, 6803 only
-            if (typ == o_Inherent_03 && cpu != cpu_6303) return 0;
+            if (typ == o_Inherent_03 && curCPU != CPU_6303) return 0;
         case o_Inherent_11: // implied instructions, 6811 only
-            if (parm == 0x8F && cpu == cpu_6303)    // 6303 XGDX
+            if (parm == 0x8F && curCPU == CPU_6303)    // 6303 XGDX
                 parm = 0x18;
-            else if (typ == o_Inherent_11 && cpu != cpu_68HC11) return 0;
+            else if (typ == o_Inherent_11 && curCPU != CPU_68HC11) return 0;
         case o_Inherent:
             InstrX(parm);
             break;
 
         case o_Relative:
-            if (parm == 0x21 && cpu == cpu_6800) return 0;  // BRN
+            if (parm == 0x21 && curCPU == CPU_6800) return 0;  // BRN
             val = EvalBranch(2);
             InstrXB(parm,val);
             break;
@@ -253,7 +235,7 @@ int DoCPUOpcode(int typ, int parm)
                         break;
 
                     case 'Y':
-                        if (cpu == cpu_68HC11)
+                        if (curCPU == CPU_68HC11)
                         {
                             InstrXB(0x1800 + parm + 0x60, val);
                             break;
@@ -272,9 +254,9 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_LArith_01:
-            if (typ == o_LArith_01 && cpu == cpu_6800) return 0;
+            if (typ == o_LArith_01 && curCPU == CPU_6800) return 0;
         case o_LArith_11:
-            if (typ == o_LArith_11 && cpu != cpu_68HC11) return 0;
+            if (typ == o_LArith_11 && curCPU != CPU_68HC11) return 0;
         case o_Arith:
         case o_LArith:
             oldLine = linePtr;
@@ -308,7 +290,7 @@ int DoCPUOpcode(int typ, int parm)
                 if (token == 0)
                 {
                     if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == 0) || force == '<')
-                                && (cpu != cpu_6800 || parm != 0x8D))
+                                && (curCPU != CPU_6800 || parm != 0x8D))
                         InstrXB(parm + 0x10, val);  // <$xx
                     else
                         InstrXW(parm + 0x30, val);   // >$xxxx
@@ -326,7 +308,7 @@ int DoCPUOpcode(int typ, int parm)
                             break;
 
                         case 'Y':
-                            if (cpu == cpu_68HC11)
+                            if (curCPU == CPU_68HC11)
                             {
                                 if (parm == 0x8C || parm == 0xCE || parm == 0xCF || (parm >> 8 == 0x1A))
                                     InstrXB(0xCD00 + parm + 0x20, val);
@@ -349,7 +331,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_Bit_03:
-            if (cpu != cpu_6303) return 0;
+            if (curCPU != CPU_6303) return 0;
             // AIM/OIM/EIM/TIM
             // opcode #,ofs,X (3 bytes)
             // opcode #,dir  (3 bytes)
@@ -375,7 +357,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_Bit:
-            if (cpu != cpu_68HC11) return 0;
+            if (curCPU != CPU_68HC11) return 0;
 
             val = Eval();   // direct page address or offset
             reg = 0;
@@ -419,7 +401,7 @@ int DoCPUOpcode(int typ, int parm)
             break;
 
         case o_BRelative:
-            if (cpu != cpu_68HC11) return 0;
+            if (curCPU != CPU_68HC11) return 0;
 
             val = Eval();   // direct page address or offset
             reg = 0;
@@ -465,31 +447,6 @@ int DoCPUOpcode(int typ, int parm)
             }
             break;
 
-        case o_Processor:
-            if (GetWord(word))
-            {
-                     if (strcmp(word,"6800") == 0) cpu = cpu_6800;
-                else if (strcmp(word,"6801") == 0) cpu = cpu_6801;
-                else if (strcmp(word,"6802") == 0) cpu = cpu_6800;
-                else if (strcmp(word,"6803") == 0) cpu = cpu_6801;
-                else if (strcmp(word,"6808") == 0) cpu = cpu_6801;
-
-                else if (strcmp(word,"6303") == 0) cpu = cpu_6303;
-
-                else if (strcmp(word,"6811"   ) == 0) cpu = cpu_68HC11;
-                else if (strcmp(word,"68HC11" ) == 0) cpu = cpu_68HC11;
-                else if (strcmp(word,"68HC711") == 0) cpu = cpu_68HC11;
-                else if (strcmp(word,"68HC811") == 0) cpu = cpu_68HC11;
-                else if (strcmp(word,"68HC99" ) == 0) cpu = cpu_68HC11;
-                else                                Error("Illegal option");                
-            }
-            else MissingOperand();
-            break;
-
-        case o_CPUtype:
-            cpu = parm;
-            break;
-
         default:
             return 0;
             break;
@@ -498,7 +455,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int M68HC11_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i,val;
 //  Str255  word;
@@ -513,13 +470,26 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void M68HC11_PassInit(void)
 {
-    cpu = cpu_68HC11;
 }
 
 
-void AsmInit(void)
+void Asm68HC11Init(void)
 {
-    endian = BIG_END;
+    char *p;
+
+    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab,
+               &M68HC11_DoCPUOpcode, &M68HC11_DoCPULabelOp, &M68HC11_PassInit);
+    AddCPU(p, "6800",    CPU_6800);
+    AddCPU(p, "6801",    CPU_6801);
+    AddCPU(p, "6802",    CPU_6800);
+    AddCPU(p, "6803",    CPU_6801);
+    AddCPU(p, "6808",    CPU_6801);
+    AddCPU(p, "6303",    CPU_6303);
+    AddCPU(p, "6811",    CPU_68HC11);
+    AddCPU(p, "68HC11",  CPU_68HC11);
+    AddCPU(p, "68HC711", CPU_68HC11);
+    AddCPU(p, "68HC811", CPU_68HC11);
+    AddCPU(p, "68HC99",  CPU_68HC11);
 }

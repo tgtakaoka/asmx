@@ -1,8 +1,7 @@
 // asm1802.c - copyright 1998-2007 Bruce Tomlin
 
 #define versionName "RCA 1802 assembler"
-#define THREE_TAB   // use three-tab data area in listings
-#include "asmguts.h"
+#include "asmx.h"
 
 enum
 {
@@ -16,7 +15,7 @@ enum
 //  o_Foo = o_LabelOp,
 };
 
-struct OpcdRec opcdTab[] =
+struct OpcdRec RCA1802_opcdTab[] =
 {
     {"IDL", o_None,     0x00},
     {"LDN", o_Register, 0x00},  // note: LDN R0 not allowed
@@ -142,7 +141,7 @@ int Get_1802_Reg(void)
 }
 
 
-int DoCPUOpcode(int typ, int parm)
+int RCA1802_DoCPUOpcode(int typ, int parm)
 {
     int     val;
 //  Str255  word;
@@ -200,7 +199,7 @@ int DoCPUOpcode(int typ, int parm)
 }
 
 
-int DoCPULabelOp(int typ, int parm, char *labl)
+int RCA1802_DoCPULabelOp(int typ, int parm, char *labl)
 {
 //  int     i,val;
 //  Str255  word;
@@ -215,12 +214,16 @@ int DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void PassInit(void)
+void RCA1802_PassInit(void)
 {
 }
 
 
-void AsmInit(void)
+void Asm1802Init(void)
 {
-    endian = BIG_END;
+    char *p;
+
+    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, RCA1802_opcdTab,
+               &RCA1802_DoCPUOpcode, &RCA1802_DoCPULabelOp, &RCA1802_PassInit);
+    AddCPU(p, "1802", 0);
 }
