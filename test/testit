@@ -1,24 +1,24 @@
 # this tests the various assemblers against pre-assembled instruction lists
 # in the ref sub-directory
 
-rm -f *.asm.hex
-rm -f *.asm.lst
-
 function testit()
 {
-   echo ""
-   echo "Testing $1:"
+   echo -n "Testing $1:"
 
    ../src/asmx -l -o -w -e -C $1 $1.asm >/dev/null 2>&1
 
    diff -q $1.asm.hex ref/$1.asm.hex
 
    if [ $? -ne 0 ]; then
-        echo "*** $1 test failed ***"
+        echo " FAIL"
    else
-        echo "--- $1 test passed ---"
+        echo " pass"
+        rm $1.asm.hex
+        rm $1.asm.lst
    fi
 }
+
+echo ""
 
 testit 65c02
 testit 68hc11
@@ -28,13 +28,15 @@ testit 1802
 testit 6303
 testit 6502
 testit 6502u
+testit 65c02
 testit 6800
 testit 6801
 testit 6809
+testit 8048
 testit 8051
-testit 8085
+testit 8085u
+testit f8
+testit gbz80
+testit z80
 
 echo ""
-
-rm -f *.asm.hex
-rm -f *.asm.lst

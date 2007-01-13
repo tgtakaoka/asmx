@@ -7,7 +7,7 @@
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
 
-#define versionNum "2.0a1"
+#define versionNum "2.0a2"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in hex object file
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
@@ -94,7 +94,7 @@ struct OpcdRec
 {
     OpcdStr         name;       // opcode name
     short           typ;        // opcode type
-    u_short         parm;       // opcode parameter
+    u_long          parm;       // opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 #endif
@@ -350,15 +350,17 @@ void DoLine(void);          // forward declaration
 
 int DoCPUOpcode(int typ, int parm)
 {
-    if (curAsm) return curAsm->DoCPUOpcode(typ,parm);
-           else return 0;
+    if (curAsm && curAsm -> DoCPUOpcode)
+        return curAsm -> DoCPUOpcode(typ,parm);
+    else return 0;
 }
 
 
 int DoCPULabelOp(int typ, int parm, char *labl)
 {
-    if (curAsm) return curAsm->DoCPULabelOp(typ,parm,labl);
-           else return 0;
+    if (curAsm && curAsm -> DoCPULabelOp)
+        return curAsm -> DoCPULabelOp(typ,parm,labl);
+    else return 0;
 }
 
 
@@ -370,13 +372,14 @@ void PassInit(void)
     p = asmTab;
     while(p)
     {
-        p -> PassInit();
+        if (p -> PassInit)
+            p -> PassInit();
         p = p -> next;
     }
 }
 
 
-char *AddAsm(char *name,        // assembler name
+void *AddAsm(char *name,        // assembler name
               int endian,       // assembler endian
               int addrWid,      // assembler 32-bit
               int listWid,      // listing width
@@ -401,10 +404,10 @@ char *AddAsm(char *name,        // assembler name
 
     asmTab = p;
 
-    return (char *) p;
+    return p;
 }
 
-void AddCPU(char *as,           // assembler for this CPU
+void AddCPU(void *as,           // assembler for this CPU
             char *name,         // uppercase name of this CPU
             int index)          // index number for this CPU
 {
@@ -474,6 +477,7 @@ void AsmInit(void)
     extern void Asm6809Init(void);
     extern void Asm68HC11Init(void);
     extern void Asm68HC16Init(void);
+    extern void Asm8048Init(void);
     extern void Asm8051Init(void);
     extern void Asm8085Init(void);
     extern void AsmF8Init(void);
@@ -485,6 +489,7 @@ void AsmInit(void)
     Asm6809Init();
     Asm68HC11Init();
     Asm68HC16Init();
+    Asm8048Init();
     Asm8051Init();
     Asm8085Init();
     AsmF8Init();
@@ -1718,7 +1723,6 @@ void FindOpcode(char *name, int *typ, int *parm, MacroPtr *macro)
     if (opcdTab && FindOpcodeTab(opcdTab,  name, typ, parm)) return;
     if (name[0] == '.') name++; // allow pseudo-ops to be invoked as ".OP"
     if (FindOpcodeTab((OpcdPtr) &opcdTab2, name, typ, parm)) return;
-// if name[0] == '.' try calling SetCPU
 
     *macro = FindMacro(name);
     if (*macro)
@@ -4305,10 +4309,12 @@ void DoLine()
             if (token == '@' || token == '.')
             {
                 GetWord(word);
-                if (token == '.' && FindOpcodeTab((OpcdPtr) &opcdTab2, word, &typ, &parm))
-                {
+                if (token == '.' && FindOpcodeTab((OpcdPtr) &opcdTab2, word, &typ, &parm) )
                     linePtr = oldLine;
-                }
+                else if (token == '.' && FindCPU(word))
+                    linePtr = line;
+//FIXME handle cpu type opcode in column 1 here
+//                if (opcode[0] == '.' && FindCPU(opcode+1))
                 else
                 {
                 if (token == '.' && subrLabl[0])    strcpy(labl,subrLabl);

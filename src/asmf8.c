@@ -364,31 +364,11 @@ int F8_DoCPUOpcode(int typ, int parm)
 }
 
 
-int F8_DoCPULabelOp(int typ, int parm, char *labl)
-{
-//  int     i,val;
-//  Str255  word;
-
-    switch(typ)
-    {
-        default:
-            return 0;
-            break;
-    }
-    return 1;
-}
-
-
-void F8_PassInit(void)
-{
-}
-
-
 void AsmF8Init(void)
 {
     char *p;
 
     p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, F8_opcdTab,
-               &F8_DoCPUOpcode, &F8_DoCPULabelOp, &F8_PassInit);
+               &F8_DoCPUOpcode, NULL, NULL);
     AddCPU(p, "F8", 0);
 }

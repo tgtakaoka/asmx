@@ -31,11 +31,11 @@ struct OpcdRec
 {
     OpcdStr         name;       // opcode name
     short           typ;        // opcode type
-    u_short         parm;       // opcode parameter
+    u_long          parm;       // opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 
-char *AddAsm(char *name,        // assembler name
+void *AddAsm(char *name,        // assembler name
               int endian,       // assembler endian
               int addrWid,      // assembler 32-bit
               int listWid,      // listing width
@@ -43,7 +43,7 @@ char *AddAsm(char *name,        // assembler name
               int (*DoCPUOpcode) (int typ, int parm),
               int (*DoCPULabelOp) (int typ, int parm, char *labl),
               void (*PassInit) (void) );
-void AddCPU(char *as,           // assembler for this CPU
+void AddCPU(void *as,           // assembler for this CPU
             char *name,         // uppercase name of this CPU
             int index);         // index number for this CPU
 

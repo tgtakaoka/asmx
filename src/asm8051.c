@@ -117,7 +117,7 @@ int Get_8051_Reg(const char *regList)
     if (!(token = GetWord(word)))
     {
         MissingOperand();
-        return -2;
+        return reg_EOL;
     }
 
     // 8051 needs to handle '@' symbols as part of a register name
@@ -226,7 +226,7 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     InstrBB(0xD8+reg1,val);
                     break;
 
-                case -1:
+                case reg_None:
                     linePtr = oldLine;
                     reg1 = EvalByte();
                     Comma();
@@ -244,9 +244,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch(Get_8051_Reg("A"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
 
                 case 0:
@@ -256,10 +256,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         default:
                             IllegalOperand();
-                        case -2:    // EOL
+                        case reg_EOL: // EOL
                             break;
 
-                        case -1:    // dir
+                        case reg_None: // dir
                             linePtr = oldLine;
                             val = EvalByte();
                             InstrBB(parm + 0x05, val);
@@ -293,10 +293,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
             {
                 default:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
 
-                case -1:    // dir
+                case reg_None: // dir
                     linePtr = oldLine;
                     val = EvalByte();
 
@@ -304,9 +304,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     switch (Get_8051_Reg("A #"))
                     {
                         default:
-                        case -1:
+                        case reg_None:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
                         case 0:     // dir,A
@@ -328,10 +328,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         default:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
-                        case -1:    // dir
+                        case reg_None: // dir
                             linePtr = oldLine;
                             val = EvalByte();
                             InstrBB((parm & 0xFF) + 0x05, val);
@@ -384,9 +384,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch(Get_8051_Reg("A"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
                 case 0:
                     InstrB(parm);
@@ -397,9 +397,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch(Get_8051_Reg("AB"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
                 case 0:
                     InstrB(parm);
@@ -410,10 +410,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
             oldLine = linePtr;
             switch((reg1 = Get_8051_Reg("@R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7 A C DPTR")))
             {
-                case -2:    // EOL
+                case reg_EOL: // EOL
                     break;
 
-                case -1:    // dir or bit
+                case reg_None:    // dir or bit
                     linePtr = oldLine;
                     reg1 = EvalByte();
                     oldLine = linePtr;
@@ -438,9 +438,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                         switch (Get_8051_Reg("C"))
                         {
                             default:
-                            case -1:
+                            case reg_None:
                                 IllegalOperand();
-                            case -2:
+                            case reg_EOL:
                                 break;
 
                             case 0:
@@ -459,10 +459,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         default:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
-                        case -1:    // dir
+                        case reg_None: // dir
                             linePtr = oldLine;
                             val = EvalByte();
                             InstrBBB(0x85, val, reg1);
@@ -512,10 +512,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         default:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
-                        case -1:    // dir
+                        case reg_None: // dir
                             linePtr = oldLine;
                             val = EvalByte();
                             InstrBB(0xA6 + reg1, val);
@@ -539,10 +539,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         default:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
-                        case -1:    // dir
+                        case reg_None: // dir
                             linePtr = oldLine;
                             val = EvalByte();
                             InstrBB(0xE5, val);
@@ -591,10 +591,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
             oldLine = linePtr;
             switch((reg1 = Get_8051_Reg("A DPTR @R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
             {
-                case -2:    // EOL
+                case reg_EOL: // EOL
                     break;
 
-                case -1:    // dir
+                case reg_None: // dir
                     linePtr = oldLine;
                     val = EvalByte();
                     InstrBB(parm + 0x05, val);
@@ -628,18 +628,18 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch(Get_8051_Reg("A"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
                 case 0:
                     Comma();
                     switch((reg1 = Get_8051_Reg("@R0 @R1")))
                     {
                         default:
-                        case -1:
+                        case reg_None:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
                         case 0:
                         case 1:
@@ -670,7 +670,7 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     InstrB((parm & 0xFF) + 1);
                     break;
 
-                case -1:    // bit
+                case reg_None: // bit
                     linePtr = oldLine;
                     reg1 = EvalBitReg();
                     if (reg1 < 0) break;
@@ -686,9 +686,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch (Get_8051_Reg("@A"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
 
                 case 0:
@@ -696,9 +696,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     switch (Get_8051_Reg("DPTR"))
                     {
                         default:
-                        case -1:
+                        case reg_None:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
                         case 0:
@@ -713,9 +713,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch (Get_8051_Reg("A"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
 
                 case 0:
@@ -723,9 +723,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     switch (Get_8051_Reg("@A"))
                     {
                         default:
-                        case -1:
+                        case reg_None:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
                         case 0:
@@ -734,9 +734,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                             switch (Get_8051_Reg("PC DPTR"))
                             {
                                 default:
-                                case -1:
+                                case reg_None:
                                     IllegalOperand();
-                                case -2:
+                                case reg_EOL:
                                     break;
 
                                 case 0:
@@ -756,9 +756,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch ((reg1 = Get_8051_Reg("@DPTR A @R0 @R1")))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
 
                 case 1:     // A
@@ -767,9 +767,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         case 1:     // A,A
                         default:
-                        case -1:
+                        case reg_None:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
                         case 0:     // A,@DPTR
@@ -787,9 +787,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     switch (Get_8051_Reg("A"))
                     {
                         default:
-                        case -1:
+                        case reg_None:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
                         case 0:
                             break;
@@ -803,7 +803,7 @@ int I8051_DoCPUOpcode(int typ, int parm)
             oldLine = linePtr;
             switch((reg1 = Get_8051_Reg("A A @R0 @R1 R0 R1 R2 R3 R4 R5 R6 R7")))
             {
-                case -1:
+                case reg_None:
                     linePtr = oldLine;
                     reg1 = EvalByte();
                     Comma();
@@ -839,9 +839,9 @@ int I8051_DoCPUOpcode(int typ, int parm)
             switch (Get_8051_Reg("A"))
             {
                 default:
-                case -1:
+                case reg_None:
                     IllegalOperand();
-                case -2:
+                case reg_EOL:
                     break;
 
                 case 0:
@@ -851,10 +851,10 @@ int I8051_DoCPUOpcode(int typ, int parm)
                     {
                         default:
                             IllegalOperand();
-                        case -2:
+                        case reg_EOL:
                             break;
 
-                        case -1:    // dir
+                        case reg_None: // dir
                             linePtr = oldLine;
                             val = EvalByte();
                             InstrBB(0xC5, val);
@@ -939,16 +939,11 @@ int I8051_DoCPULabelOp(int typ, int parm, char *labl)
 }
 
 
-void I8051_PassInit(void)
-{
-}
-
-
 void Asm8051Init(void)
 {
     char *p;
 
     p = AddAsm(versionName, LITTLE_END, ADDR_16, LIST_24, I8051_opcdTab,
-               &I8051_DoCPUOpcode, &I8051_DoCPULabelOp, &I8051_PassInit);
+               &I8051_DoCPUOpcode, &I8051_DoCPULabelOp, NULL);
     AddCPU(p, "8051", 0);
 }

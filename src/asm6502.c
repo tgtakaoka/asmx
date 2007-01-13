@@ -541,32 +541,12 @@ int M6502_DoCPUOpcode(int typ, int parm)
 }
 
 
-int M6502_DoCPULabelOp(int typ, int parm, char *labl)
-{
-//  int     i,val;
-//  Str255  word;
-
-    switch(typ)
-    {
-        default:
-            return 0;
-            break;
-    }
-    return 1;
-}
-
-
-void M6502_PassInit(void)
-{
-}
-
-
 void Asm6502Init(void)
 {
     char *p;
 
     p = AddAsm(versionName, LITTLE_END, ADDR_16, LIST_24, M6502_opcdTab,
-               &M6502_DoCPUOpcode, &M6502_DoCPULabelOp, &M6502_PassInit);
+               &M6502_DoCPUOpcode, NULL, NULL);
     AddCPU(p, "6502",  CPU_6502);
     AddCPU(p, "65C02", CPU_65C02);
     AddCPU(p, "6502U", CPU_6502U);

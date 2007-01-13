@@ -199,31 +199,11 @@ int RCA1802_DoCPUOpcode(int typ, int parm)
 }
 
 
-int RCA1802_DoCPULabelOp(int typ, int parm, char *labl)
-{
-//  int     i,val;
-//  Str255  word;
-
-    switch(typ)
-    {
-        default:
-            return 0;
-            break;
-    }
-    return 1;
-}
-
-
-void RCA1802_PassInit(void)
-{
-}
-
-
 void Asm1802Init(void)
 {
     char *p;
 
     p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, RCA1802_opcdTab,
-               &RCA1802_DoCPUOpcode, &RCA1802_DoCPULabelOp, &RCA1802_PassInit);
+               &RCA1802_DoCPUOpcode, NULL, NULL);
     AddCPU(p, "1802", 0);
 }

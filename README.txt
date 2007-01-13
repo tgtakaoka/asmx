@@ -501,6 +501,10 @@ MACRO / ENDM
   \1..\9 = nth macro parameter
   \? = unique ID per macro invocation (padded with leading zeros to five digits)
 
+  NOTE:  The line with the ENDM may have a label, and that will be included in the
+  macro definition.  However if you include a backslash escape before the ENDM, the
+  ENDM will not be recognized, and the macro definition will not end.  Be careful!
+
 ORG
 
   Sets the origin address of the following code.  This defaults to
@@ -531,6 +535,7 @@ PROCESSOR
      8085U         Intel 8085 with undocumented instructions
      F8            Fairchild F8
      Z80           Zilog Z-80
+     GBZ80         Gameboy Z-80 variant
 
   At the start of each pass, this defaults to the assembler specified
   in the "-C" command line option, if any, or the assembler type determined
@@ -1070,7 +1075,7 @@ Version 1.8 changes (2007-01-11)
 
  - - -
 
-Version 2.0a1 changes (2007-01-11)
+Version 2.0a1 changes (2007-01-12)
 
 * unified all assemblers into one binary
 
@@ -1090,6 +1095,20 @@ Version 2.0a1 changes (2007-01-11)
 
 * SUB pseudo-op alias was changed to SUBR because so many CPUs already have a SUB opcode
 
+* added an 8048 assembler, with no specific support for 8041/8021/8022 subsets yet
+
+ - - -
+
+Version 2.0a2 changes (2006-01-13)
+
+* Z80 would allow LD r,I or LD r,R with destination registers other than A
+
+* added Gameboy variant to Z80 assembler
+
+* fix from 2.0a1: ".CPUTYPE" in column 1 now works
+
+* Z80 ADD/ADC/SBC can be made to not require the "A," if you #define NICE_ADD
+
   Current to-do list:
 
   - need to test what happens with 32-bit symbols on 16-bit address CPUs
@@ -1100,26 +1119,19 @@ Version 2.0a1 changes (2007-01-11)
 
 To do:
 
+* add Z80 undocumented instructions
+
+* see if it's possible to get labels starting with "$" compatible with $xxxx hex constants,
+  maybe in RefSym?
+
+* The SUBROUTINE pseudo-op needs to be tweaked.  It should either define the subroutine name
+  as a label, or use the label on the left side of the line as the name of the subroutine.
+
 * Implement REP (or REPEAT) pseudo-op (currently under construction).
 
 * Implement ".FOO." operators? (.SHL. .AND. .OR., etc.)
 
 * 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
-
-* see if it's possible to get labels starting with "$" compatible with $xxxx hex constants,
-  maybe in RefSym?
-
-* need to allow label on an ENDM line:
-
-  STRING  MACRO   str
-          DB      X\? - . - 1
-          DB      str
-  X\?     ENDM
-
-* add Gameboy variant to Z80 assembler?
-
-* The SUBROUTINE pseudo-op needs to be tweaked.  It should either define the subroutine name
-  as a label, or use the label on the left side of the line as the name of the subroutine.
 
 * Linkable/relocatable object code files (long term 3.0 goal).
 

@@ -1,3 +1,5 @@
+	CPU	8085U
+
 	NOP
 	LXI	B,-1
 	STAX	B

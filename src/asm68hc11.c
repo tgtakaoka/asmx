@@ -455,32 +455,12 @@ int M68HC11_DoCPUOpcode(int typ, int parm)
 }
 
 
-int M68HC11_DoCPULabelOp(int typ, int parm, char *labl)
-{
-//  int     i,val;
-//  Str255  word;
-
-    switch(typ)
-    {
-        default:
-            return 0;
-            break;
-    }
-    return 1;
-}
-
-
-void M68HC11_PassInit(void)
-{
-}
-
-
 void Asm68HC11Init(void)
 {
     char *p;
 
     p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab,
-               &M68HC11_DoCPUOpcode, &M68HC11_DoCPULabelOp, &M68HC11_PassInit);
+               &M68HC11_DoCPUOpcode, NULL, NULL);
     AddCPU(p, "6800",    CPU_6800);
     AddCPU(p, "6801",    CPU_6801);
     AddCPU(p, "6802",    CPU_6800);

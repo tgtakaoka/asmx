@@ -1805,32 +1805,12 @@ int M68K_DoCPUOpcode(int typ, int parm)
 }
 
 
-int M68K_DoCPULabelOp(int typ, int parm, char *labl)
-{
-//  int     i,val;
-//  Str255  word;
-
-    switch(typ)
-    {
-        default:
-            return 0;
-            break;
-    }
-    return 1;
-}
-
-
-void M68K_PassInit(void)
-{
-}
-
-
 void Asm68KInit(void)
 {
     char *p;
 
     p = AddAsm(versionName, BIG_END, ADDR_32, LIST_24, M68K_opcdTab,
-               &M68K_DoCPUOpcode, &M68K_DoCPULabelOp, &M68K_PassInit);
+               &M68K_DoCPUOpcode, NULL, NULL);
     AddCPU(p, "68K",    CPU_68000);
     AddCPU(p, "68000",  CPU_68000);
     AddCPU(p, "68010",  CPU_68010);
