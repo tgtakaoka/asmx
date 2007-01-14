@@ -7,7 +7,7 @@
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
 
-#define versionNum "2.0a2"
+#define versionNum "2.0a3"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in hex object file
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())

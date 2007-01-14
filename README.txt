@@ -1109,11 +1109,11 @@ Version 2.0a2 changes (2006-01-13)
 
 * Z80 ADD/ADC/SBC can be made to not require the "A," if you #define NICE_ADD
 
-  Current to-do list:
+ - - -
 
-  - need to test what happens with 32-bit symbols on 16-bit address CPUs
-    - negative symbols vs $8000-$FFFF symbols?  maybe RefSym should sign-extend from 16 bits?
-    - masking or wraparound of values for location counter?  (sign-extend locPtr as "." too?)
+Version 2.0a3 changes (2007-01-14)
+
+* Fixed a bug with 68K CMP "Dn,Dn" that got the registers reversed
 
  - - -
 

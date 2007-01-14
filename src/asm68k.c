@@ -1105,22 +1105,8 @@ int M68K_DoCPUOpcode(int typ, int parm)
                     else InstrW((parm & 0xFF00) + (val & 0x00FF));
                     break;
 
-                case WID_W:
-                    val = EvalWBranch(2);
-                    InstrWW(parm & 0xFF00,val);
-                    break;
-
-                case WID_L:
-#if 0 // long branch for 68020+
-                    val = EvalLBranch(2);
-                    InstrWL(parm & 0xFF00 + 0xFF,val);
-                    break;
-#endif
-                default:
-                    BadMode();
-                    break;
-
                 case WID_X:
+#if 1 // to enable optimized branches
 #if 0 // long branch for 68020+
                     // if not a forward reference, can choose L, W, or B branch
                     val = EvalLBranch(2);
@@ -1136,6 +1122,21 @@ int M68K_DoCPUOpcode(int typ, int parm)
                          InstrW((parm & 0xFF00) + (val & 0x00FF));
                     else InstrWW(parm & 0xFF00,val);
 #endif
+                    break;
+#endif
+                case WID_W:
+                    val = EvalWBranch(2);
+                    InstrWW(parm & 0xFF00,val);
+                    break;
+
+                case WID_L:
+#if 0 // long branch for 68020+
+                    val = EvalLBranch(2);
+                    InstrWL(parm & 0xFF00 + 0xFF,val);
+                    break;
+#endif
+                default:
+                    BadMode();
                     break;
             }
             break;
@@ -1373,7 +1374,7 @@ int M68K_DoCPUOpcode(int typ, int parm)
                         {   // dest must be a data register
                             if ((ea1.mode & 0x38) != 0) { BadMode(); break; }
                         }
-                        else if ((ea1.mode & 0x38) == 0)
+                        if ((ea1.mode & 0x38) == 0)
                         {
                             // Dn,Dn needs the dest to be a register for CMP
                             InstrW(parm + (ea1.mode << 9) + reg1);

@@ -2,7 +2,7 @@
 # this should work with GNU make, gcc, and bash shell
 
 # version number for zipfile name
-VERSION = 2.0a2
+VERSION = 2.0a3
 
 # C compiler target architecture
 #   this is the setting for OS X to create a universal PPC/Intel binary
