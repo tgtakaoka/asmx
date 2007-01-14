@@ -1376,7 +1376,7 @@ int DoCPUOpcode(int typ, int parm)
                         {   // dest must be a data register
                             if ((ea1.mode & 0x38) != 0) { BadMode(); break; }
                         }
-                        else if ((ea1.mode & 0x38) == 0)
+                        if ((ea1.mode & 0x38) == 0)
                         {
                             // Dn,Dn needs the dest to be a register for CMP
                             InstrW(parm + (ea1.mode << 9) + reg1);

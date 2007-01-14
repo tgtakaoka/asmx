@@ -1011,6 +1011,12 @@ Version 1.8 changes (2007-01-11)
 
  - - -
 
+Version 1.8.1 changes (2007-01-14)
+
+* Fixed a bug with 68K CMP "Dn,Dn" that got the registers reversed
+
+ - - -
+
 To do:
 
 * Implement REP (or REPEAT) pseudo-op (currently under construction).

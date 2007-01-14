@@ -15,7 +15,7 @@
 #define THREE_TAB       // three-tab is required for thirty-two
 #endif
 
-#define versionNum "1.8"
+#define versionNum "1.8.1"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in intel hex format
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
