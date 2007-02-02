@@ -7,7 +7,7 @@
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
 
-#define versionNum "2.0a3"
+#define versionNum "2.0a4"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in hex object file
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
@@ -94,7 +94,7 @@ struct OpcdRec
 {
     OpcdStr         name;       // opcode name
     short           typ;        // opcode type
-    u_long          parm;       // opcode parameter
+    u_short         parm;       // opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 #endif
@@ -115,10 +115,6 @@ int             macRepeat[MAX_MACRO]; // repeat count for REP pseudo-op
 struct AsmRec
 {
     struct AsmRec   *next;          // next AsmRec
-    int             endian;         // endianness for this assembler
-    int             addrWid;        // address bus witdth, ADDR_16 or ADDR_32
-    int             listWid;        // listing hex area width, LIST_16 or LIST_24
-    OpcdPtr         opcdTab;        // opcdTab[] for this assembler
     int             (*DoCPUOpcode) (int typ, int parm);
     int             (*DoCPULabelOp) (int typ, int parm, char *labl);
     void            (*PassInit) (void);
@@ -131,6 +127,10 @@ struct CpuRec
     struct CpuRec   *next;          // next CpuRec
     AsmPtr          as;             // assembler for CPU type
     int             index;          // CPU type index for assembler
+    int             endian;         // endianness for this CPU
+    int             addrWid;        // address bus width, ADDR_16 or ADDR_32
+    int             listWid;        // listing hex area width, LIST_16 or LIST_24
+    OpcdPtr         opcdTab;        // opcdTab[] for this assembler
     char            name[1];        // all-uppercase name of CPU
 };
 typedef struct CpuRec *CpuPtr;
@@ -184,6 +184,7 @@ bool            cl_Obj;             // TRUE to generate object file
 bool            cl_S9;              // TRUE to generate an S-record object file instead of Intel hex
 int             cl_S9type;          // type of S9 file: 9, 19, 28, or 37
 bool            cl_Stdout;          // TRUE to send object file to stdout
+bool            cl_ListP1;          // TRUE to show listing in first assembler pass
 
 FILE            *source;            // source input file
 FILE            *object;            // object output file
@@ -380,10 +381,6 @@ void PassInit(void)
 
 
 void *AddAsm(char *name,        // assembler name
-              int endian,       // assembler endian
-              int addrWid,      // assembler 32-bit
-              int listWid,      // listing width
-              struct OpcdRec opcdTab[],  // assembler opcode table
               int (*DoCPUOpcode) (int typ, int parm),
               int (*DoCPULabelOp) (int typ, int parm, char *labl),
               void (*PassInit) (void) )
@@ -394,10 +391,6 @@ void *AddAsm(char *name,        // assembler name
 
     strcpy(p -> name, name);
     p -> next     = asmTab;
-    p -> endian   = endian;
-    p -> addrWid  = addrWid;
-    p -> listWid  = listWid;
-    p -> opcdTab  = opcdTab;
     p -> DoCPUOpcode  = DoCPUOpcode;
     p -> DoCPULabelOp = DoCPULabelOp;
     p -> PassInit = PassInit;
@@ -409,7 +402,11 @@ void *AddAsm(char *name,        // assembler name
 
 void AddCPU(void *as,           // assembler for this CPU
             char *name,         // uppercase name of this CPU
-            int index)          // index number for this CPU
+            int index,          // index number for this CPU
+            int endian,         // assembler endian
+            int addrWid,        // assembler 32-bit
+            int listWid,        // listing width
+            struct OpcdRec opcdTab[])  // assembler opcode table
 {
     CpuPtr p;
 
@@ -419,6 +416,10 @@ void AddCPU(void *as,           // assembler for this CPU
     p -> next  = cpuTab;
     p -> as    = (AsmPtr) as;
     p -> index = index;
+    p -> endian   = endian;
+    p -> addrWid  = addrWid;
+    p -> listWid  = listWid;
+    p -> opcdTab  = opcdTab;
 
     cpuTab = p;
 }
@@ -451,10 +452,10 @@ bool SetCPU(char *cpuName)
     {
         curCPU  = p -> index;
         curAsm  = p -> as;
-        endian  = p -> as -> endian;
-        opcdTab = p -> as -> opcdTab;
-        addrWid = p -> as -> addrWid;
-        listWid = p -> as -> listWid;
+        endian  = p -> endian;
+        addrWid = p -> addrWid;
+        listWid = p -> listWid;
+        opcdTab = p -> opcdTab;
 
         CodeFlush();    // make a visual change in the hex object file
 
@@ -474,6 +475,7 @@ void AsmInit(void)
     extern void Asm1802Init(void);
     extern void Asm6502Init(void);
     extern void Asm68KInit(void);
+    extern void Asm6805Init(void);
     extern void Asm6809Init(void);
     extern void Asm68HC11Init(void);
     extern void Asm68HC16Init(void);
@@ -486,6 +488,7 @@ void AsmInit(void)
     Asm1802Init();
     Asm6502Init();
     Asm68KInit();
+    Asm6805Init();
     Asm6809Init();
     Asm68HC11Init();
     Asm68HC16Init();
@@ -848,21 +851,41 @@ char * ListWord(char *p, u_short w)
 }
 
 
+char * ListLong24(char *p, u_long l)
+{
+    char s[16]; // with extra space for just in case
+
+    sprintf(s,"%.6lX",l & 0xFFFFFF);
+    return ListStr(p,s);
+}
+
+
 char * ListLong(char *p, u_long l)
 {
     char s[16]; // with extra space for just in case
 
-    sprintf(s,"%.8X",(unsigned int) l);
+    sprintf(s,"%.8lX",l);
     return ListStr(p,s);
 }
 
 
 char * ListAddr(char *p,u_long addr)
 {
-    if (addrWid == ADDR_32) // you need listWid == LIST_24 with this too
-        p = ListLong(p,addr);
-    else
-        p = ListWord(p,addr);
+    switch(addrWid)
+    {
+        default:
+        case ADDR_16:
+            p = ListWord(p,addr);
+            break;
+
+        case ADDR_24:
+            p = ListLong24(p,addr);
+            break;
+
+        case ADDR_32: // you need listWid == LIST_24 with this too
+            p = ListLong(p,addr);
+            break;
+    };
 
     return p;
 }
@@ -873,7 +896,7 @@ char * ListLoc(u_long addr)
 
     p = ListAddr(listLine,addr);
     *p++ = ' ';
-    if (listWid == LIST_24 && addrWid != ADDR_32)
+    if (listWid == LIST_24 && addrWid == ADDR_16)
         *p++ = ' ';
 
     return p;
@@ -1346,12 +1369,12 @@ MacroPtr NewMacro(char *name)
     if (p)
     {
         strcpy(p -> name, name);
-        p -> def = FALSE;
+        p -> def     = FALSE;
         p -> toomany = FALSE;
-        p -> text = NULL;
-        p -> next = macroTab;
-        p -> parms = NULL;
-        p -> nparms = 0;
+        p -> text    = NULL;
+        p -> next    = macroTab;
+        p -> parms   = NULL;
+        p -> nparms  = 0;
     }
 
     return p;
@@ -1761,13 +1784,13 @@ SymPtr AddSym(char *symName)
     p = malloc(sizeof *p + strlen(symName));
 
     strcpy(p -> name, symName);
-    p -> value = 0;
-    p -> next = symTab;
-    p -> defined = FALSE;
+    p -> value    = 0;
+    p -> next     = symTab;
+    p -> defined  = FALSE;
     p -> multiDef = FALSE;
-    p -> isSet = FALSE;
-    p -> equ = FALSE;
-    p -> known = FALSE;
+    p -> isSet    = FALSE;
+    p -> equ      = FALSE;
+    p -> known    = FALSE;
 
     symTab = p;
 
@@ -1906,18 +1929,30 @@ void DumpSym(SymPtr p, char *s, int *w)
         n++;
     }
 
-    if (addrMax == ADDR_32)
-        sprintf(s, "%.8lX ", p->value);
-    else
-        sprintf(s, "%.4lX ", p->value & 0xFFFF);
+    switch(addrMax)
+    {
+        default:
+        case ADDR_16:
+            sprintf(s, "%.4lX ", p->value & 0xFFFF);
+            break;
+
+        case ADDR_24:
+#if 0
+            sprintf(s, "%.6lX ", p->value & 0xFFFFFF);
+            break;
+#endif
+        case ADDR_32:
+            sprintf(s, "%.8lX ", p->value);
+            break;
+    }
 
     s = s + strlen(s);
 
     n = 0;
-    if (!p->defined)    {*s++ = 'U'; n++;}  // Undefined
-    if ( p->multiDef)   {*s++ = 'M'; n++;}  // Multiply defined
-    if ( p->isSet)      {*s++ = 'S'; n++;}  // Set
-    if ( p->equ)        {*s++ = 'E'; n++;}  // Equ
+    if (!p -> defined)    {*s++ = 'U'; n++;}  // Undefined
+    if ( p -> multiDef)   {*s++ = 'M'; n++;}  // Multiply defined
+    if ( p -> isSet)      {*s++ = 'S'; n++;}  // Set
+    if ( p -> equ)        {*s++ = 'E'; n++;}  // Equ
     while (n < 3)
     {
         *s++ = ' ';
@@ -2129,7 +2164,7 @@ int Factor(void)
                     if (GetWord(word) == -1)
                     {
                         p = FindSym(word);
-                        val = (p && p -> known);
+                        val = (p && (p -> known || pass == 1));
                     }
                     else IllegalOperand();
                     break;
@@ -2142,7 +2177,7 @@ int Factor(void)
                     if (GetWord(word) == -1)
                     {
                         p = FindSym(word);
-                        val = !(p && p -> known);
+                        val = !(p && (p -> known || pass == 1));
                     }
                     else IllegalOperand();
                     break;
@@ -3089,7 +3124,7 @@ void ListOut(void)
     if (cl_List)
         fprintf(listing,"%s\n",listLine);
 
-    if ((errFlag && cl_Err) || (warnFlag && cl_Warn))
+    if (pass == 2 && ((errFlag && cl_Err) || (warnFlag && cl_Warn)))
         fprintf(stderr,"%s\n",listLine);
 }
 
@@ -3758,7 +3793,7 @@ void DoOpcode(int typ, int parm)
 void DoLabelOp(int typ, int parm, char *labl)
 {
     int         val;
-    int         i;
+    int         i,n;
     Str255      word;
     int         token;
     Str255      opcode;
@@ -3784,15 +3819,23 @@ void DoLabelOp(int typ, int parm, char *labl)
 
                 // "XXXX  (XXXX)"
                 p = listLine;
-                if (addrWid == ADDR_32)
-                    for (i = 0; i <= 8; i++) *p++ = ' ';
-                else
+                switch(addrWid)
                 {
-                    if (listWid == LIST_24)
-                        for (i = 0; i <= 5; i++) *p++ = ' ';
-                    else
-                        for (i = 0; i <= 4; i++) *p++ = ' ';
+                    default:
+                    case ADDR_16:
+                        if (listWid == LIST_24) n=5;
+                                           else n=4;
+                        break;
+
+                    case ADDR_24:
+                        n=6;
+                        break;
+
+                    case ADDR_32:
+                        n=8;
+                        break;
                 }
+                for (i = 0; i <= n; i++) *p++ = ' ';
                 *p++ = '=';
                 *p++ = ' ';
                 p = ListAddr(p,val);
@@ -3975,7 +4018,7 @@ void DoLabelOp(int typ, int parm, char *labl)
                 i = ReadSourceLine(line, sizeof(line));
                 while (i && typ != o_ENDM)
                 {
-                    if (pass == 2 && (listFlag || errFlag))
+                    if ((pass == 2 || cl_ListP1) && (listFlag || errFlag))
                         ListOut();
                     CopyListLine();
 
@@ -4159,7 +4202,7 @@ void DoLabelOp(int typ, int parm, char *labl)
                 i = ReadSourceLine(line, sizeof(line));
                 while (i && typ != o_REPEND)
                 {
-                    if (pass == 2 && (listFlag || errFlag))
+                    if ((pass == 2 || cl_ListP1) && (listFlag || errFlag))
                         ListOut();
                     CopyListLine();
 
@@ -4313,8 +4356,6 @@ void DoLine()
                     linePtr = oldLine;
                 else if (token == '.' && FindCPU(word))
                     linePtr = line;
-//FIXME handle cpu type opcode in column 1 here
-//                if (opcode[0] == '.' && FindCPU(opcode+1))
                 else
                 {
                 if (token == '.' && subrLabl[0])    strcpy(labl,subrLabl);
@@ -4391,7 +4432,7 @@ void DoLine()
             }
         }
 
-        if (pass == 2 && listThisLine && (errFlag || listMacFlag || !macLineFlag))
+        if ((pass == 2 || cl_ListP1) && listThisLine && (errFlag || listMacFlag || !macLineFlag))
             ListOut();
     }
     else
@@ -4419,6 +4460,10 @@ void DoLine()
             {
                 if (macPtr[macLevel] && macLevel >= MAX_MACRO)
                     Error("Macros nested too deeply");
+#if 1
+                else if (pass == 2 && !macro -> def)
+                    Error("Macro has not been defined yet");
+#endif
                 else
                 {
                     if (macPtr[macLevel])
@@ -4453,40 +4498,72 @@ void DoLine()
                     Error("Too many operands");
         }
 
-        if (pass == 1)
+        if (pass == 1 && !cl_ListP1)
             AddLocPtr(abs(instrLen));
         else
         {
             p = listLine;
             if (showAddr) p = ListLoc(locPtr);
-            else
+            else switch(addrWid)
             {
-                if (addrWid == ADDR_32)
-                    p = listLine + 9;
-                else
+                default:
+                case ADDR_16:
                     p = listLine + 5;
+                    break;
+
+                case ADDR_24:
+                    p = listLine + 7;
+                    break;
+
+                case ADDR_32:
+                    p = listLine + 9;
+                    break;
             }
-            if (listWid == LIST_24)
-            {
-                if (addrWid == ADDR_32)
-                    numhex = 6;
-                else
-                    numhex = 8;
-            }
-            else
+
+            // determine width of hex data area
+            if (listWid == LIST_16)
                 numhex = 5;
+            else // listWid == LIST_24
+            {
+                switch(addrWid)
+                {
+                    default:
+                    case ADDR_16:
+                    case ADDR_24:
+                        numhex = 8;
+                        break;
+
+                    case ADDR_32:
+                        numhex = 6;
+                        break;
+                }
+            }
 
             if (instrLen>0) // positive instrLen for CPU instruction formatting
             {
-                if (addrWid == ADDR_32)
-                    p = listLine + 9;
-                else
+                // determine start of hex data area
+                switch(addrWid)
                 {
-                    if (listWid == LIST_24)
-                        p = listLine + 6;
-                    else
-                        p = listLine + 5;
+                    default:
+                    case ADDR_16:
+                        if (listWid == LIST_24) p = listLine + 6;
+                                           else p = listLine + 5;
+                        break;
+
+                    case ADDR_24:
+                        p = listLine + 7;
+                        break;
+
+                    case ADDR_32:
+                        p = listLine + 9;
+                        break;
                 }
+
+                // special case because 24-bit address usually can't fit
+                // 8 bytes of code with operand spacing
+                if (addrWid == ADDR_24 && listWid == LIST_24)
+                    numhex = 6;
+
                 if (hexSpaces & 1) { *p++ = ' '; }
                 for (i = 0; i < instrLen; i++)
                 {
@@ -4561,6 +4638,9 @@ void DoPass()
 
     fprintf(stderr,"Pass %d\n",pass);
 
+    if (cl_ListP1)
+        fprintf(listing,"Pass %d\n",pass);
+
     errCount      = 0;
     condLevel     = 0;
     condFail      = 0;
@@ -4577,8 +4657,8 @@ void DoPass()
     opcdTab       = NULL;
     listWid       = LIST_24;
     addrWid       = ADDR_32;
-    addrMax       = addrWid;
     SetCPU(defCPU);
+    addrMax       = addrWid;
 
     // reset all code pointers
     CodeAbsOrg(0);
@@ -4609,7 +4689,7 @@ void DoPass()
     // any lines which have invalid syntax, etc., because whatever
     // is found after an END statement should esentially be ignored.
 
-    if (pass == 2)
+    if (pass == 2 || cl_ListP1)
     {
         while (i)
         {
@@ -4654,19 +4734,20 @@ void usage(void)
     fprintf(stderr,"    %s [options] srcfile\n",progname);
     fprintf(stderr,"\n");
     fprintf(stderr,"Options:\n");
-    fprintf(stderr,"    --               end of options\n");
-    fprintf(stderr,"    -e               show errors to screen\n");
-    fprintf(stderr,"    -w               show warnings to screen\n");
-    fprintf(stderr,"    -l [filename]    make a listing file, default is srcfile.lst\n");
-    fprintf(stderr,"    -o [filename]    make an object file, default is srcfile.hex or srcfile.s9\n");
-    fprintf(stderr,"    -d label[=value] define a label, and assign an optional value\n");
-//  fprintf(stderr,"    -9               output object file in Motorola S9 format (16-bit address)\n");
-    fprintf(stderr,"    -s9              output object file in Motorola S9 format (16-bit address)\n");
-    fprintf(stderr,"    -s19             output object file in Motorola S9 format (16-bit address)\n");
-    fprintf(stderr,"    -s28             output object file in Motorola S9 format (24-bit address)\n");
-    fprintf(stderr,"    -s37             output object file in Motorola S9 format (32-bit address)\n");
-    fprintf(stderr,"    -c               send object code to stdout\n");
-    fprintf(stderr,"    -C cputype       specify default CPU type (currently ");
+    fprintf(stderr,"    --                  end of options\n");
+    fprintf(stderr,"    -e                  show errors to screen\n");
+    fprintf(stderr,"    -w                  show warnings to screen\n");
+//  fprintf(stderr,"    -1                  output listing during first pass\n");
+    fprintf(stderr,"    -l [filename]       make a listing file, default is srcfile.lst\n");
+    fprintf(stderr,"    -o [filename]       make an object file, default is srcfile.hex or srcfile.s9\n");
+    fprintf(stderr,"    -d label[[:]=value] define a label, and assign an optional value\n");
+//  fprintf(stderr,"    -9                  output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr,"    -s9                 output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr,"    -s19                output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr,"    -s28                output object file in Motorola S9 format (24-bit address)\n");
+    fprintf(stderr,"    -s37                output object file in Motorola S9 format (32-bit address)\n");
+    fprintf(stderr,"    -c                  send object code to stdout\n");
+    fprintf(stderr,"    -C cputype          specify default CPU type (currently ");
     if (defCPU[0]) fprintf(stderr,"%s",defCPU);
               else fprintf(stderr,"no default");
     fprintf(stderr,")\n");
@@ -4679,9 +4760,11 @@ void getopts(int argc, char * const argv[])
     int     ch;
     int     val;
     Str255  labl,word;
+    bool    setSym;
+    int     token;
     int     neg;
 
-    while ((ch = getopt(argc, argv, "ew9cd:l:o:s:C:?")) != -1)
+    while ((ch = getopt(argc, argv, "ew19cd:l:o:s:C:?")) != -1)
     {
         switch (ch)
         {
@@ -4691,6 +4774,10 @@ void getopts(int argc, char * const argv[])
 
             case 'w':
                 cl_Warn = TRUE;
+                break;
+
+            case '1':
+                cl_ListP1 = TRUE;
                 break;
 
             case '9': // -9 option is deprecated
@@ -4721,7 +4808,14 @@ void getopts(int argc, char * const argv[])
                 linePtr = line;
                 GetWord(labl);
                 val = 0;
-                if (GetWord(word) == '=')
+                setSym = FALSE;
+                token = GetWord(word);
+                if (token == ':')
+                {
+                    setSym = TRUE;
+                    token = GetWord(word);
+                }
+                if (token == '=')
                 {
                     neg = 1;
                     if (GetWord(word) == '-')
@@ -4731,7 +4825,7 @@ void getopts(int argc, char * const argv[])
                     }
                     val = neg * EvalNum(word);
                 }
-                DefSym(labl,val,FALSE,TRUE);
+                DefSym(labl,val,setSym,!setSym);
                 break;
 
             case 'l':
@@ -4829,6 +4923,7 @@ int main (int argc, char * const argv[])
     cl_Warn    = FALSE;
     cl_List    = FALSE;
     cl_Obj     = FALSE;
+    cl_ListP1  = FALSE;
 
     asmTab     = NULL;
     cpuTab     = NULL;

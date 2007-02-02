@@ -203,7 +203,6 @@ void Asm1802Init(void)
 {
     char *p;
 
-    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, RCA1802_opcdTab,
-               &RCA1802_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "1802", 0);
+    p = AddAsm(versionName, &RCA1802_DoCPUOpcode, NULL, NULL);
+    AddCPU(p, "1802", 0, BIG_END, ADDR_16, LIST_24, RCA1802_opcdTab);
 }

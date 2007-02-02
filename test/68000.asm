@@ -1,4 +1,4 @@
-; 68000 instruction set tests
+; 68000/68010 instruction set tests
 
 M68010  EQU     0
 

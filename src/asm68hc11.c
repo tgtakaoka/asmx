@@ -459,17 +459,16 @@ void Asm68HC11Init(void)
 {
     char *p;
 
-    p = AddAsm(versionName, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab,
-               &M68HC11_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "6800",    CPU_6800);
-    AddCPU(p, "6801",    CPU_6801);
-    AddCPU(p, "6802",    CPU_6800);
-    AddCPU(p, "6803",    CPU_6801);
-    AddCPU(p, "6808",    CPU_6801);
-    AddCPU(p, "6303",    CPU_6303);
-    AddCPU(p, "6811",    CPU_68HC11);
-    AddCPU(p, "68HC11",  CPU_68HC11);
-    AddCPU(p, "68HC711", CPU_68HC11);
-    AddCPU(p, "68HC811", CPU_68HC11);
-    AddCPU(p, "68HC99",  CPU_68HC11);
+    p = AddAsm(versionName, &M68HC11_DoCPUOpcode, NULL, NULL);
+    AddCPU(p, "6800",    CPU_6800,   BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "6801",    CPU_6801,   BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "6802",    CPU_6800,   BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "6803",    CPU_6801,   BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "6808",    CPU_6801,   BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "6303",    CPU_6303,   BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "6811",    CPU_68HC11, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "68HC11",  CPU_68HC11, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "68HC711", CPU_68HC11, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "68HC811", CPU_68HC11, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
+    AddCPU(p, "68HC99",  CPU_68HC11, BIG_END, ADDR_16, LIST_24, M68HC11_opcdTab);
 }

@@ -108,18 +108,18 @@ whatever options you want.
 
 Here are the command line options:
 
-    --               end of options
-    -e               show errors to screen
-    -w               show warnings to screen
-    -l [filename]    make a listing file, default is srcfile.lst
-    -o [filename]    make an object file, default is srcfile.hex or srcfile.s9
-    -d label[=value] define a label, and assign an optional value
-    -s9              output object file in Motorola S9 format (16-bit address)
-    -s19             output object file in Motorola S9 format (16-bit address)
-    -s28             output object file in Motorola S9 format (24-bit address)
-    -s37             output object file in Motorola S9 format (32-bit address)
-    -c               send object code to stdout
-    -C cputype       specify default CPU type (currently 6502)
+    --                  end of options
+    -e                  show errors to screen
+    -w                  show warnings to screen
+    -l [filename]       make a listing file, default is srcfile.lst
+    -o [filename]       make an object file, default is srcfile.hex or srcfile.s9
+    -d label[[:]=value] define a label, and assign an optional value
+    -s9                 output object file in Motorola S9 format (16-bit address)
+    -s19                output object file in Motorola S9 format (16-bit address)
+    -s28                output object file in Motorola S9 format (24-bit address)
+    -s37                output object file in Motorola S9 format (32-bit address)
+    -c                  send object code to stdout
+    -C cputype          specify default CPU type (currently 6502)
 
 Example:
 
@@ -136,7 +136,11 @@ Notes:
   file name.  It's really better to just put -l and -o first in the
   options.
 
-  The value in -d must be a number.  No expressions are allowed.
+  The value in -d must be a number.  No expressions are allowed.  The
+  valid forms are:
+    -d label          defines the label as EQU 0
+    -d label=value    defines the label as EQU value
+    -d label:=value   defines the label as SET value
 
   The -c and -o options are incompatible.  Only the last one on the
   command line will be used.  Normal screen output (pass number, total
@@ -1117,9 +1121,55 @@ Version 2.0a3 changes (2007-01-14)
 
  - - -
 
+Version 2.0a4 changes (2007-02-02)
+
+* added a 6805 assembler
+
+* fix from 2.0a1: symbol table dump was always 32-bits, now fixed
+
+* fix from 2.0a2: Gameboy Z80 support had CPU type flags moved from opcode table parm
+  to opcode type instead.
+
+* fixed a problem with ..DEF/..UNDEF which would cause them to return incorrect results
+  during the first assembler pass, resulting in phase errors if they were used for
+  conditional assembly
+
+* 68K: EA of "(operand)" or "(operand.W)" or "(operand.L)" did not work
+
+* 68K: EA of "0(An)" or "(0,An)" now assembles as "(An)" if offset contains no forward defs
+
+* 68K: "TST (1)*4(A1)" didn't work but "MOVE.L (A0,D0.W),1*4(A1)" did
+
+* 68K: ADD/CMP/SUB Dn,An now assembles as ADDA/CMPA/SUBA, but EA,An still reports an error
+
+* -d command line option now does a SET rather than an EQU if you use ":=" instead of "="
+
+* added 65C816 support to 6502 assembler
+
+* rearranged multi-CPU handling so that each CPU type could have its own endian and listing
+  parameters, and its own opcode table, too.  This was primarily done because of 65C816.
+
+* added a new ADDR_24 listing parameter for CPUs with 24-bit address such as 68000 and 65C816
+
+* Macros could be used before they are defined.  In the first pass there would be an error,
+  but in the second pass code would be generated and phase errors would happen.  Now an
+  error is generated if a macro is used before it is defined.
+
+ - - -
+
 To do:
 
+* need to test what happens with 32-bit symbols on 16-bit and 24-bit address CPUs
+  - negative symbols vs $8000-$FFFF symbols?  maybe RefSym should sign-extend from 16 bits?
+  - masking or wraparound of values for location counter?  (sign-extend locPtr as "." too?)
+
+* 65C816: need addressing mode force characters
+
 * add Z80 undocumented instructions
+
+* double-check 8048 instruction set, and add support for 8048 variants
+
+* need an option to not list temp symbols (containing a "." or "@") in DumpSymTab
 
 * see if it's possible to get labels starting with "$" compatible with $xxxx hex constants,
   maybe in RefSym?
@@ -1129,7 +1179,8 @@ To do:
 
 * Implement REP (or REPEAT) pseudo-op (currently under construction).
 
-* Implement ".FOO." operators? (.SHL. .AND. .OR., etc.)
+* Implement ".FOO." operators? (.SHL. .AND. .OR., etc.)  If I do this, I will probably change
+  ..DEF and ..UNDEF to .DEF. and .UNDEF.
 
 * 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
 
@@ -1140,3 +1191,4 @@ To do:
 BUGS:
 
 (none currently known)
+

@@ -1,5 +1,5 @@
-# this tests the various assemblers against pre-assembled instruction lists
-# in the ref sub-directory
+# this tests the various assemblers' instruction lists by
+# comparing with pre-assembled .hex files in the ref sub-directory
 
 function testit()
 {
@@ -23,14 +23,17 @@ echo ""
 testit 65c02
 testit 68hc11
 testit 68hc16
-testit 68k
+testit 68000
+testit 68010
 testit 1802
 testit 6303
 testit 6502
 testit 6502u
 testit 65c02
+testit 65c816
 testit 6800
 testit 6801
+testit 6805
 testit 6809
 testit 8048
 testit 8051

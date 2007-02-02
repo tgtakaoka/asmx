@@ -31,27 +31,27 @@ struct OpcdRec
 {
     OpcdStr         name;       // opcode name
     short           typ;        // opcode type
-    u_long          parm;       // opcode parameter
+    u_short         parm;       // opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 
 void *AddAsm(char *name,        // assembler name
-              int endian,       // assembler endian
-              int addrWid,      // assembler 32-bit
-              int listWid,      // listing width
-              struct OpcdRec opcdTab[],  // assembler opcode table
               int (*DoCPUOpcode) (int typ, int parm),
               int (*DoCPULabelOp) (int typ, int parm, char *labl),
               void (*PassInit) (void) );
 void AddCPU(void *as,           // assembler for this CPU
             char *name,         // uppercase name of this CPU
-            int index);         // index number for this CPU
+            int index,          // index number for this CPU
+            int endian,         // assembler endian
+            int addrWid,        // assembler 32-bit
+            int listWid,        // listing width
+            struct OpcdRec opcdTab[]); // assembler opcode table
 
 // assembler endian, address width, and listing hex width settings
 // 0 = little endian, 1 = big endian, -1 = undefined endian
 enum { UNKNOWN_END = -1, LITTLE_END, BIG_END };
-enum { ADDR_16, ADDR_32 };
-enum { LIST_16, LIST_24 };
+enum { ADDR_16, ADDR_24, ADDR_32 };
+enum { LIST_16, LIST_24 }; // Note: ADDR_24 and ADDR_32 should always use LIST_24
 
 // special register numbers for FindReg/GetReg
 enum

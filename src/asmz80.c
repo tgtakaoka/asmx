@@ -11,12 +11,14 @@ enum
     CPU_Z80U    // Z80 with undocumented instructions - not yet implemented
 };
 
-#define I_GBZ80    0x01000000
-#define I_NO_GBZ80 0x20000000
+//#define I_GBZ80    0x01000000
+//#define I_NO_GBZ80 0x20000000
 
 enum
 {
     o_None,     // No operands
+    o_NoneNGB,  // No operands, not in GBZ80
+    o_NoneGB,   // No operands, GBZ80-only
     o_LD,       // Generic LD opcode
     o_EX,       // Generic EX opcode
     o_ADD,      // Generic ADD opcode
@@ -85,28 +87,28 @@ struct OpcdRec Z80_opcdTab[] =
     {"HALT", o_None,    0x76},
     {"DI",   o_None,    0xF3},
     {"EI",   o_None,    0xFB},
-    {"EXX",  o_None,    0xD9   | I_NO_GBZ80},
-    {"NEG",  o_None,    0xED44 | I_NO_GBZ80},
-    {"RETN", o_None,    0xED45 | I_NO_GBZ80},
+    {"EXX",  o_NoneGB,  0xD9},
+    {"NEG",  o_NoneGB,  0xED44},
+    {"RETN", o_NoneGB,  0xED45},
     {"RETI", o_None,    0xED4D},
-    {"RRD",  o_None,    0xED67 | I_NO_GBZ80},
-    {"RLD",  o_None,    0xED6F | I_NO_GBZ80},
-    {"LDI",  o_None,    0xEDA0 | I_NO_GBZ80},
-    {"CPI",  o_None,    0xEDA1 | I_NO_GBZ80},
-    {"INI",  o_None,    0xEDA2 | I_NO_GBZ80},
-    {"OUTI", o_None,    0xEDA3 | I_NO_GBZ80},
-    {"LDIR", o_None,    0xEDB0 | I_NO_GBZ80},
-    {"CPIR", o_None,    0xEDB1 | I_NO_GBZ80},
-    {"INIR", o_None,    0xEDB2 | I_NO_GBZ80},
-    {"OTIR", o_None,    0xEDB3 | I_NO_GBZ80},
-    {"LDD",  o_None,    0xEDA8 | I_NO_GBZ80},
-    {"CPD",  o_None,    0xEDA9 | I_NO_GBZ80},
-    {"IND",  o_None,    0xEDAA | I_NO_GBZ80},
-    {"OUTD", o_None,    0xEDAB | I_NO_GBZ80},
-    {"LDDR", o_None,    0xEDB8 | I_NO_GBZ80},
-    {"CPDR", o_None,    0xEDB9 | I_NO_GBZ80},
-    {"INDR", o_None,    0xEDBA | I_NO_GBZ80},
-    {"OTDR", o_None,    0xEDBB | I_NO_GBZ80},
+    {"RRD",  o_NoneGB,  0xED67},
+    {"RLD",  o_NoneGB,  0xED6F},
+    {"LDI",  o_NoneGB,  0xEDA0},
+    {"CPI",  o_NoneGB,  0xEDA1},
+    {"INI",  o_NoneGB,  0xEDA2},
+    {"OUTI", o_NoneGB,  0xEDA3},
+    {"LDIR", o_NoneGB,  0xEDB0},
+    {"CPIR", o_NoneGB,  0xEDB1},
+    {"INIR", o_NoneGB,  0xEDB2},
+    {"OTIR", o_NoneGB,  0xEDB3},
+    {"LDD",  o_NoneGB,  0xEDA8},
+    {"CPD",  o_NoneGB,  0xEDA9},
+    {"IND",  o_NoneGB,  0xEDAA},
+    {"OUTD", o_NoneGB,  0xEDAB},
+    {"LDDR", o_NoneGB,  0xEDB8},
+    {"CPDR", o_NoneGB,  0xEDB9},
+    {"INDR", o_NoneGB,  0xEDBA},
+    {"OTDR", o_NoneGB,  0xEDBB},
 
     {"LD",   o_LD,      0},
     {"EX",   o_EX,      0},
@@ -154,11 +156,10 @@ struct OpcdRec Z80_opcdTab[] =
 
 //  Gameboy Z-80 specific instructions
 
-    {"STOP", o_None,    0x10 | I_GBZ80},
-//  {"DEBUG",o_None,    0xED | I_GBZ80}, // does this really exist?
-    {"SWAP", o_SWAP,    0x00 | I_GBZ80},
-    {"LDH",  o_LDH,     0x00 | I_GBZ80},
-    {"SWAP", o_SWAP,    0x00 | I_GBZ80},
+    {"STOP", o_NoneGB,  0x10},
+//  {"DEBUG",o_NoneGB,  0xED}, // does this really exist?
+    {"SWAP", o_SWAP,    0x00},
+    {"LDH",  o_LDH,     0x00},
 
     {"",    o_Illegal,  0}
 };
@@ -274,17 +275,20 @@ int Z80_DoCPUOpcode(int typ, int parm)
     switch(typ)
     {
         case o_None:
+        case o_NoneGB:
+        case o_NoneNGB:
             if (curCPU != CPU_GBZ80 || (parm & 0xFFF7) != 0xEDA0) // LDI/LDD 0xEDA0/0xEDA8
             {
-                if ((parm & I_GBZ80)    && curCPU != CPU_GBZ80) return 0;
-                if ((parm & I_NO_GBZ80) && curCPU == CPU_GBZ80) return 0;
+                if ((parm == o_NoneGB)   && curCPU != CPU_GBZ80) return 0;
+                if ((parm == o_NoneNGB) && curCPU == CPU_GBZ80) return 0;
                 if (curCPU == CPU_GBZ80 && parm == 0xED4D) parm = 0xD9; // RETI
                 InstrX(parm & 0xFFFF);
                 break;
             }
-            parm = ((parm & 0x08) << 1) | 0x22 | I_GBZ80; // fall-through for LDI/LDD
 
-            if (curCPU != CPU_GBZ80) return 0;
+        // LDI/LDD:
+            parm = ((parm & 0x08) << 1) | 0x22; // fall-through for LDI/LDD
+
             switch((reg1 = GetReg(Z80_regs)))
             {
                 case reg_EOL:
@@ -1513,8 +1517,7 @@ void AsmZ80Init(void)
 {
     char *p;
 
-    p = AddAsm(versionName, LITTLE_END, ADDR_16, LIST_24, Z80_opcdTab,
-               &Z80_DoCPUOpcode, &Z80_DoCPULabelOp, NULL);
-    AddCPU(p, "Z80", CPU_Z80);
-    AddCPU(p, "GBZ80", CPU_GBZ80);
+    p = AddAsm(versionName, &Z80_DoCPUOpcode, &Z80_DoCPULabelOp, NULL);
+    AddCPU(p, "Z80",   CPU_Z80,   LITTLE_END, ADDR_16, LIST_24, Z80_opcdTab);
+    AddCPU(p, "GBZ80", CPU_GBZ80, LITTLE_END, ADDR_16, LIST_24, Z80_opcdTab);
 }
