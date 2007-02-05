@@ -526,6 +526,7 @@ PROCESSOR
      6809          Motorola 6809
      6800 6802     Motorola 6800
      6801 6803     Motorola 6801
+     6805          Motorola 6805
      6303          Hitachi 6303 (6800 variant)
      6811 68HC11   Motorola 68HC11 variants
      68HC711 68HC811
@@ -538,6 +539,8 @@ PROCESSOR
      8085          Intel 8085
      8085U         Intel 8085 with undocumented instructions
      F8            Fairchild F8
+     JERRY         Atari Jaguar DSP
+     TOM           Atari Jaguar GPU
      Z80           Zilog Z-80
      GBZ80         Gameboy Z-80 variant
 
@@ -1154,6 +1157,22 @@ Version 2.0a4 changes (2007-02-02)
 * Macros could be used before they are defined.  In the first pass there would be an error,
   but in the second pass code would be generated and phase errors would happen.  Now an
   error is generated if a macro is used before it is defined.
+
+ - - -
+
+Version 2.0b1 changes (2007-02-05)
+
+* 68K: "EOR Dn,Dn" did not assemble properly
+
+* ADDR_24 list mode was one character too wide for DB data
+
+* Added Atari Jaguar GPU/DSP support.
+  - Bonuses: ROLQ instruction equivalent to RORQ 32-n,Rn
+             pre-defined JR/JUMP condition codes
+  - Caveat: labels are byte addresses, so if you use MOVE PC,Rn and compare the address,
+    or if you make a table of addresses, you need to divide by two.  This needs some way
+    to inherently divide Tom/Jerry code addresses by 2. I'll probably figure something
+    out before the final 2.0 version.
 
  - - -
 

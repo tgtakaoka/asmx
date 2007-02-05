@@ -1448,7 +1448,7 @@ int M68K_DoCPUOpcode(int typ, int parm)
                         {   // dest must be a data register
                             if ((ea1.mode & 0x38) != 0) { BadMode(); break; }
                         }
-                        if ((ea1.mode & 0x38) == 0) // Dn
+                        if ((ea1.mode & 0x38) == 0 && (reg2 & 0x8000)) // Dn,Dn, except for EOR
                         {
                             // Dn,Dn needs the dest to be a register for CMP
                             InstrW(parm + (ea1.mode << 9) + reg1);

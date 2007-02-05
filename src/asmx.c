@@ -7,7 +7,7 @@
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
 
-#define versionNum "2.0a4"
+#define versionNum "2.0b1"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in hex object file
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
@@ -472,31 +472,21 @@ void AsmInit(void)
 {
     char *p;
 
-    extern void Asm1802Init(void);
-    extern void Asm6502Init(void);
-    extern void Asm68KInit(void);
-    extern void Asm6805Init(void);
-    extern void Asm6809Init(void);
-    extern void Asm68HC11Init(void);
-    extern void Asm68HC16Init(void);
-    extern void Asm8048Init(void);
-    extern void Asm8051Init(void);
-    extern void Asm8085Init(void);
-    extern void AsmF8Init(void);
-    extern void AsmZ80Init(void);
+#define ASSEMBLER(name) extern void Asm ## name ## Init(void); Asm ## name ## Init();
 
-    Asm1802Init();
-    Asm6502Init();
-    Asm68KInit();
-    Asm6805Init();
-    Asm6809Init();
-    Asm68HC11Init();
-    Asm68HC16Init();
-    Asm8048Init();
-    Asm8051Init();
-    Asm8085Init();
-    AsmF8Init();
-    AsmZ80Init();
+    ASSEMBLER(1802);
+    ASSEMBLER(6502);
+    ASSEMBLER(68K);
+    ASSEMBLER(6805);
+    ASSEMBLER(6809);
+    ASSEMBLER(68HC11);
+    ASSEMBLER(68HC16);
+    ASSEMBLER(8048);
+    ASSEMBLER(8051);
+    ASSEMBLER(8085);
+    ASSEMBLER(F8);
+    ASSEMBLER(Jag);
+    ASSEMBLER(Z80);
 
 //  strcpy(defCPU,"Z80");     // hard-coded default for testing
 
@@ -4607,7 +4597,7 @@ void DoLine()
                         }
                         if (numhex == 6 && (i%numhex) == 2) *p++ = ' ';
                         if (numhex == 6 && (i%numhex) == 4) *p++ = ' ';
-                        if (numhex == 8 && (i%numhex) == 4) *p++ = ' ';
+                        if (numhex == 8 && (i%numhex) == 4 && addrWid != ADDR_24) *p++ = ' ';
                         p = ListByte(p,bytStr[i]);
                         if (i>=numhex) *p = 0;
                     }

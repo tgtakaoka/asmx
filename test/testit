@@ -39,6 +39,8 @@ testit 8048
 testit 8051
 testit 8085u
 testit f8
+testit jerry
+testit tom
 testit gbz80
 testit z80
 
