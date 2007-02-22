@@ -63,7 +63,7 @@ jerry.asm:56: *** Error:  Unknown opcode ***
 006A  C822                      STORE   R1,(R15+2)      ; 50   C822
 006C  CC02                      MOVE    PC,R2           ; 51   CC02
 006E  D022                      JUMP    $02,(R1)        ; 52   D022
-0070  D422                      JR      $02,*+4         ; 53   D422
+0070  D422                      JR      $02,*+2         ; 53   D422
 0072  D822                      MMULT   R1,R2           ; 54   D822
 0074  DC22                      MTOI    R1,R2           ; 55   DC22
 0076  E022                      NORMI   R1,R2           ; 56   E022

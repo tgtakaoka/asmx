@@ -829,8 +829,8 @@ void Asm8048Init(void)
     char *p;
 
     p = AddAsm(versionName, &I8048_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "8048",  CPU_8048, LITTLE_END, ADDR_16, LIST_24, I8048_opcdTab);
-//    AddCPU(p, "8041",  CPU_8041, LITTLE_END, ADDR_16, LIST_24, I8048_opcdTab);
-//    AddCPU(p, "8021",  CPU_8021, LITTLE_END, ADDR_16, LIST_24, I8048_opcdTab);
-//    AddCPU(p, "8022",  CPU_8022, LITTLE_END, ADDR_16, LIST_24, I8048_opcdTab);
+    AddCPU(p, "8048",  CPU_8048, LITTLE_END, ADDR_16, LIST_24, 8, I8048_opcdTab);
+//    AddCPU(p, "8041",  CPU_8041, LITTLE_END, ADDR_16, LIST_24, 8, I8048_opcdTab);
+//    AddCPU(p, "8021",  CPU_8021, LITTLE_END, ADDR_16, LIST_24, 8, I8048_opcdTab);
+//    AddCPU(p, "8022",  CPU_8022, LITTLE_END, ADDR_16, LIST_24, 8, I8048_opcdTab);
 }

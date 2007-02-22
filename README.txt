@@ -62,7 +62,7 @@ this decision.  The 6502 assembler can also override this with a
 that this usage is different from "<" and ">" as a high/low byte
 of a word value.)
 
-Some assemblers like to output code in binary.  This might be nice
+Some assemblers can only output code in binary.  This might be nice
 if you're making a video game cartridge ROM, but it's really not
 very flexible.  Intel and Motorola both came up with very nice text
 file formats which don't require any kind of padding when you do an
@@ -93,7 +93,7 @@ If you can't use the make file, the simplest way is this:
 
   gcc *.c -o asmx
 
-That's it.  Now you will probably want to copy it to your
+That's it.  Now you will might want to copy it to your
 /usr/local/bin or ~/bin directory, but that's your choice.
 
  - - -
@@ -118,6 +118,7 @@ Here are the command line options:
     -s19                output object file in Motorola S9 format (16-bit address)
     -s28                output object file in Motorola S9 format (24-bit address)
     -s37                output object file in Motorola S9 format (32-bit address)
+    -b [baseaddr]       output object file as binary with optional base address
     -c                  send object code to stdout
     -C cputype          specify default CPU type (currently 6502)
 
@@ -128,13 +129,14 @@ Example:
 This assembles the 6502 source file "program.asm", shows warnings and
 errors to the screen, creates a listing file "program.asm.lst", and
 puts the object code in an Intel hex format file named "program.asm.hex".
+(Binary files get named "program.asm.bin", and Motorola S9 files get an
+extension of .s9, .s19, .s28, or .s37.)
 
 Notes:
 
-  The '--' option is needed when you use -l or -o as the last option
-  on the command line, so that they don't try to eat up your source
-  file name.  It's really better to just put -l and -o first in the
-  options.
+  The '--' option is needed when you use -l, -o, or -b as the last option
+  on the command line, so that they don't try to eat up your source file
+  name.  It's really better to just put -l and -o first in the options.
 
   The value in -d must be a number.  No expressions are allowed.  The
   valid forms are:
@@ -142,9 +144,19 @@ Notes:
     -d label=value    defines the label as EQU value
     -d label:=value   defines the label as SET value
 
-  The -c and -o options are incompatible.  Only the last one on the
-  command line will be used.  Normal screen output (pass number, total
-  errors, error messages, etc.) always goes to stderr.
+  By default, object code is written as an Intel hex file unless the -s or
+  -b option is specified.
+
+  The value in -b specifies the start address for your binary file. If you
+  are making code for a ROM that starts at 0xC000, use "-b 0xC000" and the
+  first byte of the object file will be whatever belongs at 0xC000. Anything
+  at a lower address is not written to the file, and any gaps are filled
+  with 0xFF. Be careful about using large ORG values or the resulting
+  binary file could become VERY large.
+
+  The -c and -o options are incompatible.  Attempting to use both will
+  result in an error.  Normal screen output (pass number, total errors,
+  error messages, etc.) always goes to stderr.
 
  - - -
 
@@ -434,6 +446,11 @@ IF expr / ELSE / ELSIF expr / ENDIF
   a macro is defined, IF statements are checked for matching ENDIF
   statements.
 
+INCBIN filename
+
+  This inserts the contents of the named binary file into the object
+  code output. The size of the binary file is shown in the listing.
+
 INCLUDE filename
 
   This starts reading source code from the named file.  The file is
@@ -453,6 +470,10 @@ LIST / OPT
     LIST NOEXPAND / OPT NOEXPAND  Turn off data expansion in listing
     LIST SYM / OPT SYM            Turn on symbol table in listing
     LIST NOSYM / OPT NOSYM        Turn off symbol table in listing
+    LIST TEMP / OPT TEMP          Turn on temp symbols in symbol table
+                                    listing
+    LIST NOTEMP / OPT NOTEMP      Turn off temp symbols in symbol table
+                                    listing
 
   The default is listing on, macro expansion off, data expansion on,
   symbol table on.
@@ -519,6 +540,7 @@ PROCESSOR
   This selects a specific CPU type to assemble code for.  Some assemblers
   support multiple CPU sub-types.  Currently supported CPU types are:
 
+     NONE          No CPU type selected
      1802          RCA 1802
      6502          MOS Technology 6502
      6502U         MOS Technology 6502 with undocumented instructions
@@ -539,8 +561,8 @@ PROCESSOR
      8085          Intel 8085
      8085U         Intel 8085 with undocumented instructions
      F8            Fairchild F8
-     JERRY         Atari Jaguar DSP
      TOM           Atari Jaguar GPU
+     JERRY         Atari Jaguar DSP
      Z80           Zilog Z-80
      GBZ80         Gameboy Z-80 variant
 
@@ -607,6 +629,16 @@ SUBROUTINE / SUBR name
                SUBROUTINE
        LABEL
        .LABEL  NOP        ; this becomes "LABEL.LABEL"
+
+WORDSIZE n
+
+  Specifies the CPUs word size in bits.  This is for CPUs which do not
+  support byte addressing.  If the word size is zero, the native CPU
+  word size is used.  Currently only the Jaguar DSP/GSP uses a word
+  size that is not equal to 8.
+
+  This is primarily intended for using DS pseudo-ops to create data
+  structure offsets, using WORDSIZE 8.
 
 ZSCII
 
@@ -1122,6 +1154,8 @@ Version 2.0a3 changes (2007-01-14)
 
 * Fixed a bug with 68K CMP "Dn,Dn" that got the registers reversed
 
+* 68K branches are made as short as possible if the destination is a known value
+
  - - -
 
 Version 2.0a4 changes (2007-02-02)
@@ -1176,7 +1210,64 @@ Version 2.0b1 changes (2007-02-05)
 
  - - -
 
+Version 2.0b2 changes (2007-02-22)
+
+* added a CPU type of "NONE"
+
+* when printing an error message, extra hex data listing lines are no longer printed to stderr
+
+* 68K/GBZ80 changed some value range warnings to errors
+
+* 68K: longwords in instructions are now spaced in the listing as longwords when possible
+
+* 68K: ADDI/CMPI/SUBI #imm,An now assembles as ADDA/CMPA/SUBA
+
+* 68K: ADD/CMP/SUB EA,An now assembles as ADDA/CMPA/SUBA
+
+* 68K: warning when branch could be shorter
+
+* 68K: merged changes back to 1.8.2
+
+* assembler labels in column 1 are now checked for starting with a non-numeric character
+
+* added INCBIN pseudo-op to include binary files
+
+* INCLUDE wasn't allowing blanks in file names, even when quotes were used
+
+* a binary object file can now be generated with with the "-b [baseaddr]" option
+  - hex baseaddr must be specified with a leading "0x"
+  - out-of-order bytes will cause a padding fill of 0xFF bytes
+  - bytes below baseaddr will not be put into file
+
+* added support for CPUs with an addressing granularity (the resolution of a pointer)
+  larger than a byte, such as the Jaguar GPU/DSP. When a code label is defined, or the
+  current location pointer is read (with '.', '*', or '$'), it is divided by the number
+  of bytes per word. This can be overriden with the WORDSIZE pseudo-op, which either
+  specifies a new word size or, if zero, returns to the CPU's native width.
+
+  This is a somewhat shaky feature right now, and doesn't handle things like word
+  alignment when the DB pseudo-op is used, or even adjusting the address at the left
+  margin of the listing file. I'll see about improving it if someone starts using this
+  for Jaguar.
+
+* added ASCIZ/ASCIIZ pseudo-op, which is like DB except that it adds a null to the end
+  of the data
+
+* added a new listing option TEMP/NOTEMP to not list temp symbols (containing a "."
+  or "@") in symbol table at end of listing file
+
+ - - -
+
 To do:
+
+* The SUBROUTINE pseudo-op needs to be tweaked.  It should either define the subroutine name
+  as a label, or use the label on the left side of the line as the name of the subroutine.
+
+* add an end value for the -b command line option?
+
+* error or warning if -b and data is out of range?
+
+* change "out of range" warnings in DB/DW to errors?
 
 * need to test what happens with 32-bit symbols on 16-bit and 24-bit address CPUs
   - negative symbols vs $8000-$FFFF symbols?  maybe RefSym should sign-extend from 16 bits?
@@ -1188,13 +1279,8 @@ To do:
 
 * double-check 8048 instruction set, and add support for 8048 variants
 
-* need an option to not list temp symbols (containing a "." or "@") in DumpSymTab
-
 * see if it's possible to get labels starting with "$" compatible with $xxxx hex constants,
   maybe in RefSym?
-
-* The SUBROUTINE pseudo-op needs to be tweaked.  It should either define the subroutine name
-  as a label, or use the label on the left side of the line as the name of the subroutine.
 
 * Implement REP (or REPEAT) pseudo-op (currently under construction).
 
@@ -1202,6 +1288,7 @@ To do:
   ..DEF and ..UNDEF to .DEF. and .UNDEF.
 
 * 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
+  (maybe it was for "this could be direct page" warnings on absolute addressing mode?)
 
 * Linkable/relocatable object code files (long term 3.0 goal).
 
@@ -1210,4 +1297,3 @@ To do:
 BUGS:
 
 (none currently known)
-

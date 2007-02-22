@@ -2,13 +2,15 @@
 
 #include "asmx.h"
 
-#define versionName "asmx multi-assembler"
+#define VERSION_NAME "asmx multi-assembler"
 
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
 
-#define versionNum "2.0b1"
-#define copyright "Copyright 1998-2007 Bruce Tomlin"
+#ifndef VERSION // should be defined on the command line
+#define VERSION "2.0"
+#endif
+#define COPYRIGHT "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in hex object file
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
 const int symTabCols = 3;       // number of columns for symbol table dump
@@ -130,6 +132,7 @@ struct CpuRec
     int             endian;         // endianness for this CPU
     int             addrWid;        // address bus width, ADDR_16 or ADDR_32
     int             listWid;        // listing hex area width, LIST_16 or LIST_24
+    int             wordSize;       // addressing word size in bits
     OpcdPtr         opcdTab;        // opcdTab[] for this assembler
     char            name[1];        // all-uppercase name of CPU
 };
@@ -161,6 +164,7 @@ bool            macLineFlag;        // TRUE if line came from a macro
 int             linenum;            // line number in main source file
 bool            expandHexFlag;      // TRUE to expand long hex data to multiple listing lines
 bool            symtabFlag;         // TRUE to show symbol table in listing
+bool            tempSymFlag;        // TRUE to show temp symbols in symbol table listing
 
 int             condLevel;          // current IF nesting level
 int             condFail;           // highest non-failed IF nesting level
@@ -181,7 +185,9 @@ bool            cl_Err;             // TRUE for errors to screen
 bool            cl_Warn;            // TRUE for warnings to screen
 bool            cl_List;            // TRUE to generate listing file
 bool            cl_Obj;             // TRUE to generate object file
-bool            cl_S9;              // TRUE to generate an S-record object file instead of Intel hex
+bool            cl_ObjType;         // type of object file to generate:
+enum { OBJ_HEX, OBJ_S9, OBJ_BIN };  // values for cl_Obj
+u_long          cl_Binbase;         // base address for OBJ_BIN
 int             cl_S9type;          // type of S9 file: 9, 19, 28, or 37
 bool            cl_Stdout;          // TRUE to send object file to stdout
 bool            cl_ListP1;          // TRUE to show listing in first assembler pass
@@ -189,6 +195,7 @@ bool            cl_ListP1;          // TRUE to show listing in first assembler p
 FILE            *source;            // source input file
 FILE            *object;            // object output file
 FILE            *listing;           // listing output file
+FILE            *incbin;            // binary include file
 FILE            *(include[MAX_INCLUDE]);    // include files
 Str255          incname[MAX_INCLUDE];       // include file names
 int             incline[MAX_INCLUDE];       // include line number
@@ -204,6 +211,8 @@ int             curCPU;             // current CPU index for current assembler
 int             endian;             // CPU endian: UNKNOWN_END, LITTLE_END, BIG_END
 int             addrWid;            // CPU address width: ADDR_16, ADDR_32
 int             listWid;            // listing hex area width: LIST_16, LIST_24
+int             wordSize;           // current CPU's addressing size in bits
+int             wordDiv;            // scaling factor for current word size
 int             addrMax;            // maximum addrWid used
 OpcdPtr         opcdTab;            // current CPU's opcode table
 Str255          defCPU;             // default CPU name
@@ -225,6 +234,7 @@ enum
     o_FCC,      // FCC pseudo-op
     o_ZSCII,    // ZSCII pseudo-op
     o_ASCIIC,   // counted DB pseudo-op
+    o_ASCIIZ,   // null-terminated DB pseudo-op
     o_ALIGN,    // ALIGN pseudo-op
     o_ALIGN_n,  // for EVEN pseudo-op
 
@@ -254,6 +264,8 @@ enum
 #ifdef ENABLE_REP
     o_REPEAT,   // REPEAT pseudo-op
 #endif
+    o_Incbin,   // INCBIN pseudo-op
+    o_WORDSIZE, // WORDSIZE pseudo-op
 
     o_SEG,      // SEG pseudo-op
     o_SUBR,     // SUBROUTINE pseudo-op
@@ -298,6 +310,8 @@ struct OpcdRec opcdTab2[] =
     {"FCC",       o_FCC,      0},
     {"ZSCII",     o_ZSCII,    0},
     {"ASCIIC",    o_ASCIIC,   0},
+    {"ASCIZ",     o_ASCIIZ,   0},
+    {"ASCIIZ",    o_ASCIIZ,   0},
     {"END",       o_END,      0},
     {"ENDM",      o_ENDM,     0},
     {"ALIGN",     o_ALIGN,    0},
@@ -306,6 +320,7 @@ struct OpcdRec opcdTab2[] =
     {"REPEND",    o_REPEND,   0},
 #endif
     {"INCLUDE",   o_Include,  0},
+    {"INCBIN",    o_Incbin,   0},
     {"PROCESSOR", o_Processor,0},
     {"CPU",       o_Processor,0},
 
@@ -334,6 +349,7 @@ struct OpcdRec opcdTab2[] =
     {"ELSE",      o_ELSE,     0},
     {"ELSIF",     o_ELSIF,    0},
     {"ENDIF",     o_ENDIF,    0},
+    {"WORDSIZE",  o_WORDSIZE, 0},
 
     {"",          o_Illegal,  0}
 };
@@ -406,6 +422,7 @@ void AddCPU(void *as,           // assembler for this CPU
             int endian,         // assembler endian
             int addrWid,        // assembler 32-bit
             int listWid,        // listing width
+            int wordSize,       // addressing word size in bits
             struct OpcdRec opcdTab[])  // assembler opcode table
 {
     CpuPtr p;
@@ -419,6 +436,7 @@ void AddCPU(void *as,           // assembler for this CPU
     p -> endian   = endian;
     p -> addrWid  = addrWid;
     p -> listWid  = listWid;
+    p -> wordSize = wordSize;
     p -> opcdTab  = opcdTab;
 
     cpuTab = p;
@@ -441,6 +459,12 @@ CpuPtr FindCPU(char *cpuName)
 }
 
 
+void SetWordSize(int wordSize)
+{
+    wordDiv = (wordSize + 7) / 8;
+}
+
+
 void CodeFlush(void);
 // sets up curAsm and curCpu based on cpuName, returns non-zero if success
 bool SetCPU(char *cpuName)
@@ -450,12 +474,14 @@ bool SetCPU(char *cpuName)
     p = FindCPU(cpuName);
     if (p)
     {
-        curCPU  = p -> index;
-        curAsm  = p -> as;
-        endian  = p -> endian;
-        addrWid = p -> addrWid;
-        listWid = p -> listWid;
-        opcdTab = p -> opcdTab;
+        curCPU   = p -> index;
+        curAsm   = p -> as;
+        endian   = p -> endian;
+        addrWid  = p -> addrWid;
+        listWid  = p -> listWid;
+        wordSize = p -> wordSize;
+        opcdTab  = p -> opcdTab;
+        SetWordSize(wordSize);
 
         CodeFlush();    // make a visual change in the hex object file
 
@@ -468,11 +494,16 @@ bool SetCPU(char *cpuName)
 
 int isalphanum(char c);
 void Uprcase(char *s);
+
+
 void AsmInit(void)
 {
     char *p;
 
 #define ASSEMBLER(name) extern void Asm ## name ## Init(void); Asm ## name ## Init();
+
+    p = AddAsm("None", NULL, NULL, NULL);
+    AddCPU(p, "NONE",  0, UNKNOWN_END, ADDR_32, LIST_24, 8, NULL);
 
     ASSEMBLER(1802);
     ASSEMBLER(6502);
@@ -638,6 +669,13 @@ int ishex(char c)
 {
     c = toupper(c);
     return isdigit(c) || ('A' <= c && c <= 'F');
+}
+
+
+int isalphaul(char c)
+{
+    c = toupper(c);
+    return ('A' <= c && c <= 'Z') || c == '_';
 }
 
 
@@ -1001,7 +1039,7 @@ int GetZSCIIShift(char ch)
 void ConvertZSCII(void)
 {
     //  input data is in bytStr[]
-    //  input data length is -instrLen
+    //  input data length is instrLen
 
     int     i,inpos;            // input position
     char    ch;                 // current and next input byte
@@ -1011,16 +1049,17 @@ void ConvertZSCII(void)
     InitZSCII();
 
     inpos = 0;
-    while (inpos < -instrLen)
+    while (inpos < instrLen)
     {
         // get current char and shift
         ch = bytStr[inpos];
         shift = GetZSCIIShift(ch);
+        nshift = shift;
 
         // determine next char's shift (skipping blanks and newlines, stopping at end of data)
         i = inpos + 1;
-        while (i < -instrLen && (nshift = GetZSCIIShift(bytStr[i])) < 0) i++;
-        if (i >= -instrLen) nshift = zShift;    // if end of data, use current shift as "next" shift
+        while (i < instrLen && (nshift = GetZSCIIShift(bytStr[i])) < 0) i++;
+        if (i >= instrLen) nshift = zShift;    // if end of data, use current shift as "next" shift
 
         switch(shift)
         {
@@ -1056,7 +1095,7 @@ void ConvertZSCII(void)
     EndZSCII();
 
     memcpy(bytStr,zStr,zOfs);
-    instrLen = -zOfs;
+    instrLen = zOfs;
 }
 
 
@@ -1163,6 +1202,43 @@ int GetOpcode(char *word)
     }
 
     return 0;
+}
+
+
+void GetFName(char *word)
+{
+    char            *oldLine;
+    int             ch;
+    u_char          quote;
+
+    // skip leading whitespace
+    while (*linePtr == ' ' || *linePtr == '\t')
+        linePtr++;
+    oldLine = word;
+
+    // check for quote at start of file name
+    quote = 0;
+    if (*linePtr == '"' || *linePtr == 0x27)
+        quote = *linePtr++;
+
+    // continue reading until quote or whitespace or EOL
+    while (*linePtr != 0 && *linePtr != quote && (quote || (*linePtr != ' ' && *linePtr != '\t')))
+    {
+        ch = *linePtr++;
+        if (ch == '\\' && *linePtr != 0)
+            ch = *linePtr++;
+        *oldLine++ = ch;
+    }
+    *oldLine++ = 0;
+
+    // if looking for quote, error on end quote
+    if (quote)
+    {
+        if (*linePtr == quote)
+            *linePtr++;
+        else
+            Error("Missing close quote");
+    }
 }
 
 
@@ -1962,31 +2038,35 @@ void DumpSymTab(void)
     p = symTab;
     while (p)
     {
-        DumpSym(p,s,&w);
-        p = p -> next;
+        if (tempSymFlag || !(strchr(p->name,'.') || strchr(p->name,'@')))
+        {
+            DumpSym(p,s,&w);
+            p = p -> next;
 
-        // force a newline if new symbol won't fit on current line
-        if (i+w > symTabCols)
-        {
-            if (cl_List)
-                fprintf(listing, "\n");
-            i = 0;
+            // force a newline if new symbol won't fit on current line
+            if (i+w > symTabCols)
+            {
+                if (cl_List)
+                    fprintf(listing, "\n");
+                i = 0;
+            }
+            // if last symbol or if symbol fills line, deblank and print it
+            if (p == NULL || i+w >= symTabCols)
+            {
+                Debright(s);
+                if (cl_List)
+                    fprintf(listing, "%s\n", s);
+                i = 0;
+            }
+            // otherwise just print it and count its width
+            else
+            {
+                if (cl_List)
+                    fprintf(listing, "%s", s);
+                i = i + w;
+            }
         }
-        // if last symbol or if symbol fills line, deblank and print it
-        if (p == NULL || i+w >= symTabCols)
-        {
-            Debright(s);
-            if (cl_List)
-                fprintf(listing, "%s\n", s);
-            i = 0;
-        }
-        // otherwise just print it and count its width
-        else
-        {
-            if (cl_List)
-                fprintf(listing, "%s", s);
-            i = i + w;
-        }
+        else p = p -> next;
     }
 }
 
@@ -2079,6 +2159,7 @@ int Factor(void)
         if (addrWid == ADDR_16)
             val = (short) val;            // sign-extend from 16 bits
 #endif
+            val = val / wordDiv;
             break;
 
         case '+':
@@ -2188,6 +2269,7 @@ int Factor(void)
                 if (addrWid == ADDR_16)
                     val = (short) val;    // sign-extend from 16 bits
 #endif
+                val = val / wordDiv;
                 break;
             }
 
@@ -2446,11 +2528,12 @@ int EvalLBranch(int instrLen)
 // object file generation
 
 
-    u_char ihex_buf[IHEX_SIZE];
-    u_long ihex_len;   // length of current intel hex line
-    u_long ihex_base;  // current address in intel hex buffer
-    u_long ihex_addr;  // start address of current intel hex line
-    u_short ihex_page;
+    u_char  hex_buf[IHEX_SIZE]; // buffer for current line of object data
+    u_long  hex_len;            // current size of object data buffer
+    u_long  hex_base;           // address of start of object data buffer
+    u_long  hex_addr;           // address of next byte in object data buffer
+    u_short hex_page;           // high word of address for intel hex file
+    u_long  bin_eof;            // current end of file when writing binary file
 
 // Intel hex format:
 //
@@ -2473,30 +2556,36 @@ int EvalLBranch(int instrLen)
 // ee    = checksum byte: add all bytes aa through dd
 //                        and subtract from 256 (2's complement negate)
 
-
 void write_ihex(u_long addr, u_char *buf, int len, int rectype)
 {
     int i,chksum;
 
-    if (cl_Obj || cl_Stdout)
-    {
-        if (rectype == 1 && (addr & 0xFFFF0000))
-            write_ihex(addr >> 16, buf, 0, 5);
-        if (rectype == 0 && (addr >> 16) != ihex_page)
-        {
-            write_ihex(addr >> 16, buf, 0, 4);
-            ihex_page = addr >> 16;
-        }
+    // if transfer record with long address, write extended address record
+    if (rectype == 1 && (addr & 0xFFFF0000))
+        write_ihex(addr >> 16, buf, 0, 5);
 
-        chksum = len + (addr >> 8) + addr + rectype;
-        fprintf(object,":%.2X%.4lX%.2X",len,addr & 0xFFFF,rectype);
-        for (i=0; i<len; i++)
-        {
-            fprintf(object,"%.2X",buf[i]);
-            chksum = chksum + buf[i];
-        }
-        fprintf(object,"%.2X\n",(-chksum) & 0xFF);
+    // if data record with long address, write extended address record
+    if (rectype == 0 && (addr >> 16) != hex_page)
+    {
+        write_ihex(addr >> 16, buf, 0, 4);
+        hex_page = addr >> 16;
     }
+
+    // compute initial checksum from length, address, and record type
+    chksum = len + (addr >> 8) + addr + rectype;
+
+    // print length, address, and record type
+    fprintf(object,":%.2X%.4lX%.2X",len,addr & 0xFFFF,rectype);
+
+    // print data while updating checksum
+    for (i=0; i<len; i++)
+    {
+        fprintf(object,"%.2X",buf[i]);
+        chksum = chksum + buf[i];
+    }
+
+    // print final checksum
+    fprintf(object,"%.2X\n",(-chksum) & 0xFF);
 }
 
 
@@ -2525,33 +2614,77 @@ void write_srec(u_long addr, u_char *buf, int len, int rectype)
 {
     int i,chksum;
 
-    if (cl_Obj || cl_Stdout)
+    // start checksum with length and 16-bit address
+    chksum = len+3 + ((addr >> 8) & 0xFF) + (addr & 0xFF);
+
+    // determine S9 record type
+    if (rectype)    i = cl_S9type % 10;  // xfer record = S9/S8/S7
+            else    i = cl_S9type / 10;  // code record = S1/S2/S3
+
+    // print length and address, and update checksum for long address
+    switch(cl_S9type)
     {
-        chksum = len+3 + ((addr >> 8) & 0xFF) + (addr & 0xFF);
-        if (rectype)    i = cl_S9type % 10;  // xfer record = S9/S8/S7
-                else    i = cl_S9type / 10;  // code record = S1/S2/S3
-        switch(cl_S9type)
-        {
-            case 37:
-                fprintf(object,"S%d%.2X%.8lX", i, len+5, addr);
-                chksum = chksum + ((addr >> 24) & 0xFF) + ((addr >> 16) & 0xFF) + 2;
-                break;
+        case 37:
+            fprintf(object,"S%d%.2X%.8lX", i, len+5, addr);
+            chksum = chksum + ((addr >> 24) & 0xFF) + ((addr >> 16) & 0xFF) + 2;
+            break;
 
-            case 28:
-                fprintf(object,"S%d%.2X%.6lX", i, len+4, addr & 0xFFFFFF) + 1;
-                chksum = chksum + ((addr >> 16) & 0xFF);
-                break;
+        case 28:
+            fprintf(object,"S%d%.2X%.6lX", i, len+4, addr & 0xFFFFFF) + 1;
+            chksum = chksum + ((addr >> 16) & 0xFF);
+            break;
 
-            default:
-                if (i == 0) i = 1; // handle "-s9" option
-                fprintf(object,"S%d%.2X%.4lX", i, len+3, addr & 0xFFFF);
-        }
-        for (i=0; i<len; i++)
+        default:
+            if (i == 0) i = 1; // handle "-s9" option
+            fprintf(object,"S%d%.2X%.4lX", i, len+3, addr & 0xFFFF);
+    }
+
+    // print data while updating checksum
+    for (i=0; i<len; i++)
+    {
+        fprintf(object,"%.2X",buf[i]);
+        chksum = chksum + buf[i];
+    }
+
+    // print final checksum
+    fprintf(object,"%.2X\n",~chksum & 0xFF);
+}
+
+
+void write_bin(u_long addr, u_char *buf, int len, int rectype)
+{
+    u_long i;
+
+    if (!rectype)
+    {
+        // return if end of data less than base address
+        if (addr + len <= cl_Binbase) return;
+
+        // if data crosses base address, adjust start of data
+        if (addr < cl_Binbase && addr+len > cl_Binbase)
         {
-            fprintf(object,"%.2X",buf[i]);
-            chksum = chksum + buf[i];
+            buf = buf + cl_Binbase - addr;
+            addr = cl_Binbase;
         }
-        fprintf(object,"%.2X\n",~chksum & 0xFF);
+
+        // if addr is beyond current EOF, write (addr-bin_eof) bytes of 0xFF padding
+        if (addr - cl_Binbase > bin_eof)
+        {
+            fseek(object, bin_eof, SEEK_SET);
+            for (i=0; i < addr - cl_Binbase - bin_eof; i++)
+                fputc(0xFF, object);
+        }
+
+        // seek to addr and write buf
+        fseek(object, addr - cl_Binbase, SEEK_SET);
+        fwrite(buf, 1, len, object);
+
+        // update EOF of object file
+        i = ftell(object);
+        if (i > bin_eof)
+            bin_eof = i;
+
+        //fflush(object);
     }
 }
 
@@ -2559,28 +2692,37 @@ void write_srec(u_long addr, u_char *buf, int len, int rectype)
 // rectype 0 = code, rectype 1 = xfer
 void write_hex(u_long addr, u_char *buf, int len, int rectype)
 {
-    if (cl_S9)  write_srec(addr, buf, len, rectype);
-        else    write_ihex(addr, buf, len, rectype);
+    if (cl_Obj || cl_Stdout)
+    {
+        switch(cl_ObjType)
+        {
+            default:
+            case OBJ_HEX: write_ihex(addr, buf, len, rectype); break;
+            case OBJ_S9:  write_srec(addr, buf, len, rectype); break;
+            case OBJ_BIN: write_bin (addr, buf, len, rectype); break;
+        }
+    }
 }
 
 
 void CodeInit(void)
 {
-    ihex_len  = 0;
-    ihex_base = 0;
-    ihex_addr = 0;
-    ihex_page = 0;
+    hex_len  = 0;
+    hex_base = 0;
+    hex_addr = 0;
+    hex_page = 0;
+    bin_eof  = 0;
 }
 
 
 void CodeFlush(void)
 {
-    if (ihex_len)
+    if (hex_len)
     {
-        write_hex(ihex_base, ihex_buf, ihex_len, 0);
-        ihex_len  = 0;
-        ihex_base = ihex_base + ihex_len;
-        ihex_addr = ihex_base;
+        write_hex(hex_base, hex_buf, hex_len, 0);
+        hex_len  = 0;
+        hex_base = hex_base + hex_len;
+        hex_addr = hex_base;
     }
 }
 
@@ -2589,17 +2731,17 @@ void CodeOut(int byte)
 {
     if (pass == 2)
     {
-        if (codPtr != ihex_addr)
+        if (codPtr != hex_addr)
         {
             CodeFlush();
-            ihex_base = codPtr;
-            ihex_addr = codPtr;
+            hex_base = codPtr;
+            hex_addr = codPtr;
         }
 
-        ihex_buf[ihex_len++] = byte;
-        ihex_addr++;
+        hex_buf[hex_len++] = byte;
+        hex_addr++;
 
-        if (ihex_len == IHEX_SIZE)
+        if (hex_len == IHEX_SIZE)
             CodeFlush();
     }
     locPtr++;
@@ -2614,7 +2756,7 @@ void CodeEnd(void)
     if (pass == 2)
     {
         if (xferFound)
-            write_hex(xferAddr, ihex_buf, 0, 1);
+            write_hex(xferAddr, hex_buf, 0, 1);
     }
 }
 
@@ -3103,7 +3245,7 @@ int ReadSourceLine(char *line, int max)
 }
 
 
-void ListOut(void)
+void ListOut(bool showStdErr)
 {
 /* uncomment this block if you want form feeds to be sent to the listing file
     if (listLineFF && cl_List)
@@ -3114,7 +3256,7 @@ void ListOut(void)
     if (cl_List)
         fprintf(listing,"%s\n",listLine);
 
-    if (pass == 2 && ((errFlag && cl_Err) || (warnFlag && cl_Warn)))
+    if (pass == 2 && showStdErr && ((errFlag && cl_Err) || (warnFlag && cl_Warn)))
         fprintf(stderr,"%s\n",listLine);
 }
 
@@ -3171,6 +3313,7 @@ void DoOpcode(int typ, int parm)
     {
         case o_ZSCII:
         case o_ASCIIC:
+        case o_ASCIIZ:
         case o_DB:
             instrLen = 0;
             oldLine = linePtr;
@@ -3239,16 +3382,28 @@ void DoOpcode(int typ, int parm)
                 Error("String too long");
                 instrLen = MAX_BYTSTR;
             }
-            instrLen = -instrLen;
 
-            if (typ == o_ASCIIC)
+            switch(typ)
             {
-                if (instrLen < -256) bytStr[0] = 255;
-                                else bytStr[0] = -instrLen-1;
+                case o_ASCIIC:
+                    if (instrLen > 255) bytStr[0] = 255;
+                                   else bytStr[0] = instrLen-1;
+                    break;
+
+                case o_ZSCII:
+                    ConvertZSCII();
+                    break;
+
+                case o_ASCIIZ:
+                    if (instrLen < MAX_BYTSTR)
+                        bytStr[instrLen++] = 0;
+                    break;
+
+                default:
+                    break;
             }
 
-            if (typ == o_ZSCII)
-                ConvertZSCII();
+            instrLen = -instrLen;
             break;
 
         case o_DW:
@@ -3718,31 +3873,7 @@ void DoOpcode(int typ, int parm)
             break;
 
         case o_Include:
-            // skip whitespace
-            while (*linePtr == ' ' || *linePtr == '\t')
-                linePtr++;
-            oldLine = word;
-
-            quote = 0;
-            if (*linePtr == '"' || *linePtr == 0x27)
-                quote = *linePtr++;
-
-            while (*linePtr !=0 && *linePtr != ' ' && *linePtr != '\t' && *linePtr != quote)
-            {
-                ch = *linePtr++;
-                if (ch == '\\' && *linePtr != 0)
-                    ch = *linePtr++;
-                *oldLine++ = ch;
-            }
-            *oldLine++ = 0;
-
-            if (quote)
-            {
-                if (*linePtr == quote)
-                    *linePtr++;
-                else
-                    Error("Missing close quote");
-            }
+            GetFName(word);
 
             switch(OpenInclude(word))
             {
@@ -3758,7 +3889,7 @@ void DoOpcode(int typ, int parm)
             }
             break;
 
-        case o_ENDM:
+         case o_ENDM:
             Error("ENDM without MACRO");
             break;
 
@@ -3784,7 +3915,7 @@ void DoLabelOp(int typ, int parm, char *labl)
 {
     int         val;
     int         i,n;
-    Str255      word;
+    Str255      word,s;
     int         token;
     Str255      opcode;
     MacroPtr    macro;
@@ -3903,6 +4034,8 @@ void DoLabelOp(int typ, int parm, char *labl)
             else if (strcmp(word,"NOEXPAND") == 0)  expandHexFlag = FALSE;
             else if (strcmp(word,"SYM") == 0)       symtabFlag = TRUE;
             else if (strcmp(word,"NOSYM") == 0)     symtabFlag = FALSE;
+            else if (strcmp(word,"TEMP") == 0)      tempSymFlag = TRUE;
+            else if (strcmp(word,"NOTEMP") == 0)    tempSymFlag = FALSE;
             else                                    IllegalOperand();
 
             break;
@@ -3932,6 +4065,8 @@ void DoLabelOp(int typ, int parm, char *labl)
             else if (strcmp(word,"NOEXPAND") == 0)  expandHexFlag = FALSE;
             else if (strcmp(word,"SYM") == 0)       symtabFlag = TRUE;
             else if (strcmp(word,"NOSYM") == 0)     symtabFlag = FALSE;
+            else if (strcmp(word,"TEMP") == 0)      tempSymFlag = TRUE;
+            else if (strcmp(word,"NOTEMP") == 0)    tempSymFlag = FALSE;
             else                                    Error("Illegal option");
 
             break;
@@ -4009,7 +4144,7 @@ void DoLabelOp(int typ, int parm, char *labl)
                 while (i && typ != o_ENDM)
                 {
                     if ((pass == 2 || cl_ListP1) && (listFlag || errFlag))
-                        ListOut();
+                        ListOut(TRUE);
                     CopyListLine();
 
                     // skip initial formfeeds
@@ -4193,7 +4328,7 @@ void DoLabelOp(int typ, int parm, char *labl)
                 while (i && typ != o_REPEND)
                 {
                     if ((pass == 2 || cl_ListP1) && (listFlag || errFlag))
-                        ListOut();
+                        ListOut(TRUE);
                     CopyListLine();
 
                     // skip initial formfeeds
@@ -4293,6 +4428,75 @@ void DoLabelOp(int typ, int parm, char *labl)
             break;
 #endif
 
+       case o_Incbin:
+            DefSym(labl,locPtr,FALSE,FALSE);
+
+            GetFName(word);
+
+            val = 0;
+
+            // open binary file
+            incbin = fopen(word, "r");
+
+            if (incbin)
+            {
+                // while not EOF
+                do {
+                    //   n = count of read up to MAX_BYTSTR bytes into bytStr
+                    n = fread(bytStr, 1, MAX_BYTSTR, incbin);
+                    if (n>0)
+                    {
+                        // write data out to the object file
+                        for (i=0; i<n; i++)
+                            CodeOut(bytStr[i]);
+                        val = val + n;
+                    }
+                } while (n>0);
+                if (n<0)
+                    sprintf(s,"Error reading INCBIN file '%s'",word);
+
+                if (pass == 2)
+                {
+                    // "XXXX  (XXXX)"
+                    p = ListLoc(locPtr-val);
+                    *p++ = ' ';
+                    *p++ = '(';
+                    p = ListAddr(p,val);
+                    *p++ = ')';
+                }
+
+            }
+            else
+            {
+                sprintf(s,"Unable to open INCBIN file '%s'",word);
+                Error(s);
+            }
+
+            // close binary file
+            if (incbin) fclose(incbin);
+            incbin = NULL;
+
+            break;
+
+        case o_WORDSIZE:
+            if (labl[0])
+                Error("Label not allowed");
+
+            val = Eval();
+            if (evalKnown)
+            {
+                Error("Forward reference not allowed in WORDSIZE");
+            }
+            else if (!errFlag)
+            {
+                if (val == 0)
+                    SetWordSize(wordSize);
+                else if (val < 1 || val > 64)
+                    Error("WORDSIZE must be in the range of 0..64");
+                else SetWordSize(val);
+            }
+            break;
+
         default:
             Error("Unknown opcode");
             break;
@@ -4313,12 +4517,14 @@ void DoLine()
     char        *oldLine;
     char        *p;
     int         numhex;
+    bool        firstLine;
 
     errFlag      = FALSE;
     warnFlag     = FALSE;
     instrLen     = 0;
     showAddr     = FALSE;
     listThisLine = listFlag;
+    firstLine    = TRUE;
     CopyListLine();
 
     // skip initial formfeeds
@@ -4328,7 +4534,7 @@ void DoLine()
 
     // look for label at beginning of line
     labl[0] = 0;
-    if (isalphanum(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
+    if (isalphaul(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
     {
         token = GetWord(labl);
         oldLine = linePtr;
@@ -4423,14 +4629,14 @@ void DoLine()
         }
 
         if ((pass == 2 || cl_ListP1) && listThisLine && (errFlag || listMacFlag || !macLineFlag))
-            ListOut();
+            ListOut(TRUE);
     }
     else
     {
         token = GetOpcode(opcode);
         if (token == 0 || token == '*')         // line with label only
         {
-            DefSym(labl,locPtr,FALSE,FALSE);
+            DefSym(labl,locPtr / wordDiv,FALSE,FALSE);
         }
         else
         {
@@ -4565,7 +4771,10 @@ void DoLine()
                         if (i > 0 && i % numhex == 0)
                         {
                             if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
-                                ListOut();
+                            {
+                                ListOut(firstLine);
+                                firstLine = FALSE;
+                            }
                             if (listWid == LIST_24)
                                 strcpy(listLine, "                        ");   // 24 blanks
                             else
@@ -4588,7 +4797,10 @@ void DoLine()
                         if (i > 0 && i % numhex == 0)
                         {
                             if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
-                                ListOut();
+                            {
+                                ListOut(firstLine);
+                                firstLine = FALSE;
+                            }
                             if (listWid == LIST_24)
                                 strcpy(listLine, "                        ");   // 24 blanks
                             else
@@ -4606,7 +4818,7 @@ void DoLine()
             }
 
             if (listThisLine && (errFlag || listMacFlag || !macLineFlag))
-                ListOut();
+                ListOut(firstLine);
         }
     }
 }
@@ -4638,6 +4850,7 @@ void DoPass()
     listMacFlag   = FALSE;
     expandHexFlag = TRUE;
     symtabFlag    = TRUE;
+    tempSymFlag   = TRUE;
     linenum       = 0;
     macLevel      = 0;
     macUniqueID   = 0;
@@ -4647,6 +4860,8 @@ void DoPass()
     opcdTab       = NULL;
     listWid       = LIST_24;
     addrWid       = ADDR_32;
+    wordSize      = 8;
+    SetWordSize(wordSize);
     SetCPU(defCPU);
     addrMax       = addrWid;
 
@@ -4697,7 +4912,7 @@ void DoPass()
             }
 
             if (listThisLine)
-                ListOut();
+                ListOut(TRUE);
 
             i = ReadSourceLine(line, sizeof(line));
         }
@@ -4711,8 +4926,8 @@ void DoPass()
 
 void stdversion(void)
 {
-    fprintf(stderr,"%s version %s\n",versionName,versionNum);
-//  fprintf(stderr,version);
+    fprintf(stderr,"%s version %s\n",VERSION_NAME,VERSION);
+    fprintf(stderr,"%s\n",COPYRIGHT);
 }
 
 
@@ -4736,6 +4951,7 @@ void usage(void)
     fprintf(stderr,"    -s19                output object file in Motorola S9 format (16-bit address)\n");
     fprintf(stderr,"    -s28                output object file in Motorola S9 format (24-bit address)\n");
     fprintf(stderr,"    -s37                output object file in Motorola S9 format (32-bit address)\n");
+    fprintf(stderr,"    -b [baseaddr]       output object file as binary with optional base address\n");
     fprintf(stderr,"    -c                  send object code to stdout\n");
     fprintf(stderr,"    -C cputype          specify default CPU type (currently ");
     if (defCPU[0]) fprintf(stderr,"%s",defCPU);
@@ -4754,7 +4970,7 @@ void getopts(int argc, char * const argv[])
     int     token;
     int     neg;
 
-    while ((ch = getopt(argc, argv, "ew19cd:l:o:s:C:?")) != -1)
+    while ((ch = getopt(argc, argv, "ew19b:cd:l:o:s:C:?")) != -1)
     {
         switch (ch)
         {
@@ -4771,8 +4987,8 @@ void getopts(int argc, char * const argv[])
                 break;
 
             case '9': // -9 option is deprecated
-                cl_S9 = TRUE;
-                cl_S9type = 9;
+                cl_S9type  = 9;
+                cl_ObjType = OBJ_S9;
                 break;
 
             case 's':
@@ -4785,12 +5001,28 @@ void getopts(int argc, char * const argv[])
                 else if (optarg[0] == '3' && optarg[1] == '7' && optarg[2] == 0)
                     cl_S9type = 37;
                 else usage();
-                cl_S9 = TRUE;
+                cl_ObjType = OBJ_S9;
+                break;
+
+            case 'b':
+                cl_ObjType = OBJ_BIN;
+                cl_Binbase = 0;
+                if (optarg[0] =='-')
+                {
+                    optarg = "";
+                    optind--;
+                }
+                else if (*optarg)
+                    cl_Binbase = EvalNum(optarg);
                 break;
 
             case 'c':
+                if (cl_Obj)
+                {
+                    fprintf(stderr,"%s: Conflicting options: -c can not be used with -o\n",progname);
+                    usage();
+                }
                 cl_Stdout = TRUE;
-                cl_Obj    = FALSE;
                 break;
 
             case 'd':
@@ -4829,8 +5061,12 @@ void getopts(int argc, char * const argv[])
                 break;
 
             case 'o':
-                cl_Obj    = TRUE;
-                cl_Stdout = FALSE;
+                if (cl_Stdout)
+                {
+                    fprintf(stderr,"%s: Conflicting options: -o can not be used with -c\n",progname);
+                    usage();
+                }
+                cl_Obj = TRUE;
                 if (optarg[0] =='-')
                 {
                     optarg = "";
@@ -4854,6 +5090,18 @@ void getopts(int argc, char * const argv[])
     argc -= optind;
     argv += optind;
 
+    if (cl_Stdout && cl_ObjType == OBJ_BIN)
+    {
+        fprintf(stderr,"%s: Conflicting options: -b can not be used with -c\n",progname);
+        usage();
+    }
+
+#if 1
+    // -b or -9 must force -o!
+    if (cl_ObjType != OBJ_HEX && !cl_Stdout && !cl_Obj)
+        cl_Obj = TRUE;
+#endif
+
     // now argc is the number of remaining arguments
     // and argv[0] is the first remaining argument
 
@@ -4874,17 +5122,24 @@ void getopts(int argc, char * const argv[])
 
     if (cl_Obj  && cl_ObjName [0] == 0)
     {
-        if (cl_S9)
+        switch(cl_ObjType)
         {
-            strncpy(cl_ObjName, cl_SrcName, 255-3);
-            sprintf(word,".s%d",cl_S9type);
-//            strcat (cl_ObjName, ".s9");
-            strcat (cl_ObjName, word);
-        }
-        else
-        {
-            strncpy(cl_ObjName, cl_SrcName, 255-4);
-            strcat (cl_ObjName, ".hex");
+            case OBJ_S9:
+                strncpy(cl_ObjName, cl_SrcName, 255-3);
+                sprintf(word,".s%d",cl_S9type);
+                strcat (cl_ObjName, word);
+                break;
+
+            case OBJ_BIN:
+                strncpy(cl_ObjName, cl_SrcName, 255-4);
+                strcat (cl_ObjName, ".bin");
+                break;
+
+            default:
+            case OBJ_HEX:
+                strncpy(cl_ObjName, cl_SrcName, 255-4);
+                strcat (cl_ObjName, ".hex");
+                break;
         }
     }
 }
@@ -4913,6 +5168,7 @@ int main (int argc, char * const argv[])
     cl_Warn    = FALSE;
     cl_List    = FALSE;
     cl_Obj     = FALSE;
+    cl_ObjType = OBJ_HEX;
     cl_ListP1  = FALSE;
 
     asmTab     = NULL;
@@ -4926,6 +5182,7 @@ int main (int argc, char * const argv[])
     cl_SrcName [0] = 0;     source  = NULL;
     cl_ListName[0] = 0;     listing = NULL;
     cl_ObjName [0] = 0;     object  = NULL;
+    incbin = NULL;
 
     AsmInit();
 

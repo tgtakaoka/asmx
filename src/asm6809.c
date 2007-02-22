@@ -599,5 +599,5 @@ void Asm6809Init(void)
     char *p;
 
     p = AddAsm(versionName, &M6809_DoCPUOpcode, &M6809_DoCPULabelOp, &M6809_PassInit);
-    AddCPU(p, "6809",  0, BIG_END, ADDR_16, LIST_24, M6809_opcdTab);
+    AddCPU(p, "6809",  0, BIG_END, ADDR_16, LIST_24, 8, M6809_opcdTab);
 }

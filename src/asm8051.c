@@ -944,5 +944,5 @@ void Asm8051Init(void)
     char *p;
 
     p = AddAsm(versionName, &I8051_DoCPUOpcode, &I8051_DoCPULabelOp, NULL);
-    AddCPU(p, "8051", 0, LITTLE_END, ADDR_16, LIST_24, I8051_opcdTab);
+    AddCPU(p, "8051", 0, LITTLE_END, ADDR_16, LIST_24, 8, I8051_opcdTab);
 }

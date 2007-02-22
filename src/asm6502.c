@@ -744,9 +744,9 @@ void Asm6502Init(void)
     char *p;
 
     p = AddAsm(versionName, &M6502_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "6502",   CPU_6502,   LITTLE_END, ADDR_16, LIST_24, M6502_opcdTab);
-    AddCPU(p, "65C02",  CPU_65C02,  LITTLE_END, ADDR_16, LIST_24, M6502_opcdTab);
-    AddCPU(p, "6502U",  CPU_6502U,  LITTLE_END, ADDR_16, LIST_24, M6502_opcdTab);
-    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, M6502_opcdTab);
-    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, M6502_opcdTab);
+    AddCPU(p, "6502",   CPU_6502,   LITTLE_END, ADDR_16, LIST_24, 8, M6502_opcdTab);
+    AddCPU(p, "65C02",  CPU_65C02,  LITTLE_END, ADDR_16, LIST_24, 8, M6502_opcdTab);
+    AddCPU(p, "6502U",  CPU_6502U,  LITTLE_END, ADDR_16, LIST_24, 8, M6502_opcdTab);
+    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, 8, M6502_opcdTab);
+    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, 8, M6502_opcdTab);
 }

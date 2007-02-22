@@ -59,7 +59,7 @@
         STORE   R1,(R15+2)      ; 50   C822
         MOVE    PC,R2           ; 51   CC02
         JUMP    $02,(R1)        ; 52   D022
-        JR      $02,*+4         ; 53   D422
+        JR      $02,*+2         ; 53   D422
         MMULT   R1,R2           ; 54   D822
         MTOI    R1,R2           ; 55   DC22
         NORMI   R1,R2           ; 56   E022

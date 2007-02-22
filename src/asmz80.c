@@ -866,7 +866,7 @@ int Z80_DoCPUOpcode(int typ, int parm)
                         if (Comma()) break;
                         val = Eval();
                         if (val < -128 || val > 127)
-                            Warning("Offset out of range");
+                            Error("Offset out of range");
                         InstrBB(0xE8,val);
                     }
                     break;
@@ -1088,7 +1088,7 @@ int Z80_DoCPUOpcode(int typ, int parm)
                 if ((parm >> 8) == 0xC3 && reg1 <= 3)
                 {
                     val = locPtr + 2 - val;
-                    if (-128 <= val && val <= 128)
+                    if (-128 <= val && val <= 128) // max is +128 because JR will save a byte
                         Warning("JR instruction could be used here");
                 }
             }
@@ -1401,7 +1401,7 @@ int Z80_DoCPUOpcode(int typ, int parm)
                     val = Eval();
                     if (RParen()) break;
                     if ((val & 0xFF00) != 0 && (val & 0xFF00) != 0xFF00)
-                        Warning("LDH address out of range");
+                        Error("LDH address out of range");
                     InstrBB(0xF0,val);
                     break;
 
@@ -1411,7 +1411,7 @@ int Z80_DoCPUOpcode(int typ, int parm)
                     if (Comma()) break;
                     if (Expect("A")) break;
                     if ((val & 0xFF00) != 0 && (val & 0xFF00) != 0xFF00)
-                        Warning("LDH address out of range");
+                        Error("LDH address out of range");
                     InstrBB(0xE0,val);
                     break;
 
@@ -1518,6 +1518,6 @@ void AsmZ80Init(void)
     char *p;
 
     p = AddAsm(versionName, &Z80_DoCPUOpcode, &Z80_DoCPULabelOp, NULL);
-    AddCPU(p, "Z80",   CPU_Z80,   LITTLE_END, ADDR_16, LIST_24, Z80_opcdTab);
-    AddCPU(p, "GBZ80", CPU_GBZ80, LITTLE_END, ADDR_16, LIST_24, Z80_opcdTab);
+    AddCPU(p, "Z80",   CPU_Z80,   LITTLE_END, ADDR_16, LIST_24, 8, Z80_opcdTab);
+    AddCPU(p, "GBZ80", CPU_GBZ80, LITTLE_END, ADDR_16, LIST_24, 8, Z80_opcdTab);
 }

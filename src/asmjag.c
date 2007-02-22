@@ -257,8 +257,13 @@ int Jag_DoCPUOpcode(int typ, int parm)
             {
                 // JR cc,n
                 val = Eval();
-                val = val - locPtr - 2;
-                reg2 = val / 2;
+#if 0
+                // the old way before WORDWIDTH
+                reg2 = (val - locPtr - 2)/2;
+#else
+                // the new way after WORDWIDTH
+                reg2 = val - (locPtr + 2)/2;
+#endif
                 if (!errFlag && (val < -16 || val > 15))
                     Error("Branch out of range");
                 InstrJag(parm,reg2,reg1);
@@ -521,6 +526,6 @@ void AsmJagInit(void)
     char *p;
 
     p = AddAsm(versionName, &Jag_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "TOM",   CPU_TOM,   BIG_END, ADDR_16, LIST_24, Jag_opcdTab);
-    AddCPU(p, "JERRY", CPU_JERRY, BIG_END, ADDR_16, LIST_24, Jag_opcdTab);
+    AddCPU(p, "TOM",   CPU_TOM,   BIG_END, ADDR_16, LIST_24, 16, Jag_opcdTab);
+    AddCPU(p, "JERRY", CPU_JERRY, BIG_END, ADDR_16, LIST_24, 16, Jag_opcdTab);
 }

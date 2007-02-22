@@ -293,5 +293,5 @@ void Asm6805Init(void)
     char *p;
 
     p = AddAsm(versionName, &M6805_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "6805", CPU_6805, BIG_END, ADDR_16, LIST_24, M6805_opcdTab);
+    AddCPU(p, "6805", CPU_6805, BIG_END, ADDR_16, LIST_24, 8, M6805_opcdTab);
 }

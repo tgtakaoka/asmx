@@ -1,8 +1,8 @@
 # makefile for asmx multi-assembler
 # this should work with GNU make, gcc, and bash shell
 
-# version number for zipfile name
-VERSION = 2.0b1
+# version number
+VERSION = 2.0b2
 
 # C compiler target architecture
 #   this is the setting for OS X to create a universal PPC/Intel binary
@@ -10,7 +10,7 @@ VERSION = 2.0b1
 TARGET_ARCH = -arch ppc -arch i686
 
 # C compiler flags
-CFLAGS = -Wall -O2
+CFLAGS = -Wall -O2 -DVERSION=\"$(VERSION)\"
 
 # install directory in ~/bin or wherever you want it
 INSTALL_DIR = ~/bin

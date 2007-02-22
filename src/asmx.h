@@ -45,6 +45,7 @@ void AddCPU(void *as,           // assembler for this CPU
             int endian,         // assembler endian
             int addrWid,        // assembler 32-bit
             int listWid,        // listing width
+            int wordSize,       // addressing word size in bits
             struct OpcdRec opcdTab[]); // assembler opcode table
 
 // assembler endian, address width, and listing hex width settings

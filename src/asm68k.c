@@ -453,8 +453,11 @@ void InstrAddE(EArec *ea)
 {
     int     i;
 
-    for (i = 0; i < ea -> len; i++)
-        InstrAddW(ea -> extra[i]); // FIXME: could try to detect longwords for hex spacing in listing
+    // detect longwords for proper hex spacing in listing
+    if (ea->len == 2 && ((ea->mode & 0x38) == 0x28 || ea->mode == 0x39 || ea->mode == 0x3A || ea->mode == 0x3C))
+        InstrAddL(ea -> extra[0] * 65536 + ea -> extra[1]);
+    else for (i = 0; i < ea -> len; i++)
+        InstrAddW(ea -> extra[i]);
 }
 
 
@@ -485,9 +488,12 @@ void InstrWLE(u_short op, u_long l1, EArec *ea)
     InstrClear();
 
     InstrAddW((op & 0xFFC0) | ea -> mode);
-//    InstrAddL(l1);
+#if 1 // zero to space out longwords as two words
+    InstrAddL(l1);
+#else
     InstrAddW(l1 >> 16);
     InstrAddW(l1);
+#endif
     InstrAddE(ea);
 }
 
@@ -962,7 +968,7 @@ ABSOLUTE:
                 {
                     // abs.w
                     if (reg2 < -0x8000 || reg2 > 0x7FFF)
-                        Warning("Absolute word addressing mode out of range");
+                        Error("Absolute word addressing mode out of range");
                     ea -> mode = 0x38;
                     ea -> len = 1;
                     ea -> extra[0] = val;
@@ -1168,18 +1174,29 @@ int M68K_DoCPUOpcode(int typ, int parm)
                     val = EvalWBranch(2);
                     if (evalKnown && -128 <= val && val <= 127 && val != 0 && val != 0xFF)
                          InstrW((parm & 0xFF00) + (val & 0x00FF));
-                    else InstrWW(parm & 0xFF00,val);
+                    else
+                    {
+                        if (val != 0 && -128 <= val && val <= 129) // max is +129 because short branch saves 2 bytes
+                            Warning("Short branch could be used here");
+                        InstrWW(parm & 0xFF00,val);
+                    }
 #endif
                     break;
 #endif
                 case WID_W:
                     val = EvalWBranch(2);
+                    if (val != 0 && -128 <= val && val <= 129) // max is +129 because short branch saves 2 bytes
+                        Warning("Short branch could be used here");
                     InstrWW(parm & 0xFF00,val);
                     break;
 
                 case WID_L:
 #if 0 // long branch for 68020+
                     val = EvalLBranch(2);
+                    if (val != 0 && -128 <= val && val <= 131) // max is +131 because short branch saves 4 bytes
+                        Warning("Short branch could be used here");
+                    else if (-32768 <= val && val <= 32769) // max is +32769 because word branch saves 2 bytes
+                        Warning("Word branch could be used here");
                     InstrWL(parm & 0xFF00 + 0xFF,val);
                     break;
 #endif
@@ -1464,13 +1481,32 @@ int M68K_DoCPUOpcode(int typ, int parm)
                     if (GetEA(FALSE, size, &ea1))
                     {
                         if (Comma()) break;
-                        reg1 = GetReg(data_regs); // FIXME: should handle EA,An as ADDA/CMPA/SUBA
+                        reg1 = GetReg(DA_regs);
+                        if (reg1 == 16) reg1 = 15; // SP -> A7
                         if (0 <= reg1 && reg1 <= 7)
-                        {
+                        {   // EA,Dn
                             if (reg2 == 0) { BadMode(); break; } // EOR EA,Dn is invalid
                             if ((reg2 & 4) && (ea1.mode & 0x38) == 8 && size == WID_B)
                                 { BadMode(); break; } // CMP.B An,Dn is invalid
                             InstrWE(parm + (reg1 << 9), &ea1);
+                        }
+                        else if (8 <= reg1 && reg1 <= 15 && size != WID_B)
+                        {   // EA,An - for ADD/SUB/CMP only!
+                            reg1 = reg1 - 8;
+                            switch(parm & 0xF000)
+                            {
+                                case 0xD000: // AND
+                                case 0x9000: // SUB
+                                case 0xB000: // CMP/EOR
+                                    if (reg2 & 0x8000) // disallow EOR
+                                    {
+                                        InstrWE((parm & 0xF000) + (reg1 << 9) + (size << 7) + 0x40, &ea1);
+                                    //    IllegalOperand();
+                                        break;
+                                    }
+                                default:
+                                    IllegalOperand();
+                            }
                         }
                         else IllegalOperand();
                     }
@@ -1482,7 +1518,7 @@ int M68K_DoCPUOpcode(int typ, int parm)
             // if immediate, set up parm for o_ArithI or o_LogImm
             if (!(reg1 & 0x0100))
             {
-                skipArithI = TRUE;
+                skipArithI = TRUE; // do o_LogImm
                 parm = (reg1 << 6) + size;
             }
             else
@@ -1503,7 +1539,22 @@ int M68K_DoCPUOpcode(int typ, int parm)
                 if (GetEA(TRUE, -1, &ea1))
                 {
                     if ((ea1.mode & 0x38) == 0x08) // arith immediate does not support An as dest
+                    {
+                        if ((parm & 0x0400) && size != WID_B) // SUBI/ADDI/CMPI = 04xx/06xx/0Cxx
+                        {
+                            switch(parm & 0x0F00)
+                            {
+                                default:
+                                case 0x0400: parm = 0x9000; break; // SUBI
+                                case 0x0600: parm = 0xD000; break; // ADDI
+                                case 0x0C00: parm = 0xB000; break; // CMPI
+                            }
+                            if (size == WID_L) InstrWL(parm + ((ea1.mode & 7) << 9) + (size << 7) + 0x007C, val);
+                                          else InstrWW(parm + ((ea1.mode & 7) << 9) + (size << 7) + 0x007C, val);
+                            break;
+                        }
                         BadMode();
+                    }
                     else if (size == WID_L) InstrWLE(parm, val, &ea1);
                                        else InstrWWE(parm, val, &ea1);
                 }
@@ -1885,7 +1936,7 @@ void Asm68KInit(void)
     char *p;
 
     p = AddAsm(versionName, &M68K_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "68K",    CPU_68000, BIG_END, ADDR_24, LIST_24, M68K_opcdTab);
-    AddCPU(p, "68000",  CPU_68000, BIG_END, ADDR_24, LIST_24, M68K_opcdTab);
-    AddCPU(p, "68010",  CPU_68010, BIG_END, ADDR_24, LIST_24, M68K_opcdTab);
+    AddCPU(p, "68K",    CPU_68000, BIG_END, ADDR_24, LIST_24, 8, M68K_opcdTab);
+    AddCPU(p, "68000",  CPU_68000, BIG_END, ADDR_24, LIST_24, 8, M68K_opcdTab);
+    AddCPU(p, "68010",  CPU_68010, BIG_END, ADDR_24, LIST_24, 8, M68K_opcdTab);
 }
