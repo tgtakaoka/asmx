@@ -1017,6 +1017,25 @@ Version 1.8.1 changes (2007-01-14)
 
  - - -
 
+Version 1.8.2 changes (2007-03-17)
+
+* Synced with 68K assembler in version 2.0:
+  - branches are made as short as possible if the destination is a known value
+  - EA of "(operand)" or "(operand.W)" or "(operand.L)" did not work
+  - EA of "0(An)" or "(0,An)" now assembles as "(An)" if offset contains no forward defs
+  - "TST (1)*4(A1)" didn't work but "MOVE.L (A0,D0.W),1*4(A1)" did
+  - ADD/CMP/SUB Dn,An now assembles as ADDA/CMPA/SUBA, but EA,An still reports an error
+  - "EOR Dn,Dn" did not assemble properly
+  - 68K changed absolute addressing mode range warning to errors
+  - longwords in instructions are now spaced in the listing as longwords when possible
+  - ADDI/CMPI/SUBI #imm,An now assembles as ADDA/CMPA/SUBA
+  - ADD/CMP/SUB EA,An now assembles as ADDA/CMPA/SUBA
+  - warning when branch could be shorter
+
+* assembler labels in column 1 are now checked for starting with a non-numeric character
+
+ - - -
+
 To do:
 
 * Implement REP (or REPEAT) pseudo-op (currently under construction).

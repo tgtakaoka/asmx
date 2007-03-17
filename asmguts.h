@@ -15,7 +15,7 @@
 #define THREE_TAB       // three-tab is required for thirty-two
 #endif
 
-#define versionNum "1.8.1"
+#define versionNum "1.8.2"
 #define copyright "Copyright 1998-2007 Bruce Tomlin"
 #define IHEX_SIZE   32          // max number of data bytes per line in intel hex format
 #define MAXSYMLEN   19          // max symbol length (only used in DumpSym())
@@ -473,6 +473,13 @@ int ishex(char c)
 {
     c = toupper(c);
     return isdigit(c) || ('A' <= c && c <= 'F');
+}
+
+
+int isalphaul(char c)
+{
+    c = toupper(c);
+    return ('A' <= c && c <= 'Z') || c == '_';
 }
 
 
@@ -4124,7 +4131,7 @@ void DoLine()
 
     // look for label at beginning of line
     labl[0] = 0;
-    if (isalphanum(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
+    if (isalphaul(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
     {
         token = GetWord(labl);
         oldLine = linePtr;
