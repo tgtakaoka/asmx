@@ -167,8 +167,12 @@ bool            symtabFlag;         // TRUE to show symbol table in listing
 bool            tempSymFlag;        // TRUE to show temp symbols in symbol table listing
 
 int             condLevel;          // current IF nesting level
-int             condFail;           // highest non-failed IF nesting level
-char            condElse[MAX_COND]; // TRUE if IF encountered on each nesting level
+char            condState[MAX_COND]; // state of current nesting level
+enum {
+    condELSE = 1, // ELSE has already been countered at this level
+    condTRUE = 2, // condition is currently true
+    condFAIL = 4  // condition has failed (to handle ELSE after ELSIF)
+};
 
 int             instrLen;           // Current instruction length (negative to display as long DB)
 u_char          bytStr[MAX_BYTSTR]; // Current instruction / buffer for long DB statements
@@ -2303,7 +2307,7 @@ int Factor(void)
             break;
 
         default:
-            // ignore anything else
+            MissingOperand();
             break;
     }
 
@@ -2471,9 +2475,23 @@ void CheckByte(int val)
 }
 
 
+void CheckStrictByte(int val)
+{
+    if (!errFlag && (val < -128 || val > 127))
+        Warning("Byte out of range");
+}
+
+
 void CheckWord(int val)
 {
     if (!errFlag && (val < -32768 || val > 65535))
+        Warning("Word out of range");
+}
+
+
+void CheckStrictWord(int val)
+{
+    if (!errFlag && (val < -32768 || val > 32767))
         Warning("Word out of range");
 }
 
@@ -4232,15 +4250,18 @@ void DoLabelOp(int typ, int parm, char *labl)
             if (labl[0])
                 Error("Label not allowed");
 
-            condLevel++;
 
-            if (condLevel < MAX_COND)
-                condElse[condLevel] = FALSE;
+            if (condLevel >= MAX_COND)
+                Error("IF statements nested too deeply");
+            else
+            {
+                condLevel++;
+                condState[condLevel] = 0; // this block false but level not permanently failed
 
-            condFail = condLevel - 1;
-            val = Eval();
-            if (!errFlag && val != 0)
-                condFail = condLevel;
+                val = Eval();
+                if (!errFlag && val != 0)
+                    condState[condLevel] = condTRUE; // this block true
+            }
             break;
 
         case o_ELSE:    // previous IF was true, so this section stays off
@@ -4250,14 +4271,14 @@ void DoLabelOp(int typ, int parm, char *labl)
             if (condLevel == 0)
                 Error("ELSE outside of IF block");
             else
-                if (condLevel < MAX_COND && condElse[condLevel])
+                if (condLevel < MAX_COND && (condState[condLevel] & condELSE))
                     Error("Multiple ELSE statements in an IF block");
                 else
                 {
-                    if (condLevel < MAX_COND)
-                        condElse[condLevel] = TRUE;
-
-                    condFail = condLevel - 1;                   
+                    condState[condLevel] = condELSE | condFAIL; // ELSE encountered, permanent fail
+//                  condState[condLevel] |= condELSE; // ELSE encountered
+//                  condState[condLevel] |= condFAIL; // this level permanently failed
+//                  condState[condLevel] &= ~condTRUE; // this block false
                 }
             break;
 
@@ -4268,17 +4289,15 @@ void DoLabelOp(int typ, int parm, char *labl)
             if (condLevel == 0)
                 Error("ELSIF outside of IF block");
             else
-                if (condLevel < MAX_COND && condElse[condLevel])
+                if (condLevel < MAX_COND && (condState[condLevel] & condELSE))
                     Error("Multiple ELSE statements in an IF block");
                 else
                 {
                     // i = Eval(); // evaluate condition and ignore result
                     EatIt(); // just ignore the conditional expression
 
-                    if (condLevel < MAX_COND)
-                        condElse[condLevel] = FALSE;
-
-                    condFail = condLevel - 1;
+                    condState[condLevel] |= condFAIL; // this level permanently failed
+                    condState[condLevel] &= ~condTRUE; // this block false
                 }
             break;
 
@@ -4289,10 +4308,7 @@ void DoLabelOp(int typ, int parm, char *labl)
             if (condLevel == 0)
                 Error("ENDIF outside of IF block");
             else
-            {
                 condLevel--;
-                condFail = condLevel;
-            }
             break;
 
 #ifdef ENABLE_REP
@@ -4569,7 +4585,7 @@ void DoLine()
             linePtr++;
     }
 
-    if (condLevel > condFail)
+    if (!(condState[condLevel] & condTRUE))
     {
         listThisLine = FALSE;
 
@@ -4580,47 +4596,63 @@ void DoLine()
 
             switch(typ)
             {
-                case o_IF:
-                    condLevel++;
-                    break;
-
-                case o_ELSE:
-                    if (condLevel == condFail+1)
-                    {   // previous IF was false
+                case o_IF: // nested IF inside failed IF should stay failed
+                    if (condState[condLevel-1] & condTRUE)
                         listThisLine = listFlag;
 
-                        if (condLevel < MAX_COND && condElse[condLevel])
-                            Error("Multiple ELSE statements in an IF block");
-                        else
-                        {
-                            if (condLevel < MAX_COND)
-                                condElse[condLevel] = TRUE;
-
-                            condFail++;
-                        }
+                    if (condLevel >= MAX_COND)
+                        Error("IF statements nested too deeply");
+                    else
+                    {
+                        condLevel++;
+                        condState[condLevel] = condFAIL; // this level false and permanently failed
                     }
                     break;
 
-                case o_ELSIF:
-                    if (condLevel == condFail+1)
+                case o_ELSE:
+                    if (condState[condLevel-1] & condTRUE)
+                        listThisLine = listFlag;
+
+                    if (!(condState[condLevel] & (condTRUE | condFAIL)))
                     {   // previous IF was false
                         listThisLine = listFlag;
 
-                        if (condLevel < MAX_COND && condElse[condLevel])
+                        if (condLevel < MAX_COND && (condState[condLevel] & condELSE))
+                            Error("Multiple ELSE statements in an IF block");
+                        else
+                            condState[condLevel] |= condTRUE;
+                    }
+                    condState[condLevel] |= condELSE;
+                    break;
+
+                case o_ELSIF:
+                    if (condState[condLevel-1] & condTRUE)
+                        listThisLine = listFlag;
+
+                    if (!(condState[condLevel] & (condTRUE | condFAIL)))
+                    {   // previous IF was false
+                        listThisLine = listFlag;
+
+                        if (condLevel < MAX_COND && (condState[condLevel] & condELSE))
                             Error("Multiple ELSE statements in an IF block");
                         else
                         {
                             i = Eval();
                             if (!errFlag && i != 0)
-                                condFail++;
+                                condState[condLevel] |= condTRUE;
                         }
                     }
                     break;
 
                 case o_ENDIF:
-                    condLevel--;
-                    if (condLevel == condFail)
-                        listThisLine = listFlag;
+                    if (condLevel == 0)
+                        Error("ENDIF outside of IF block");
+                    else
+                    {
+                        condLevel--;
+                        if (condState[condLevel] & condTRUE)
+                            listThisLine = listFlag;
+                    }
                     break;
 
                 default:    // ignore any other lines
@@ -4845,7 +4877,7 @@ void DoPass()
 
     errCount      = 0;
     condLevel     = 0;
-    condFail      = 0;
+    condState[condLevel] = condTRUE; // top level always true
     listFlag      = TRUE;
     listMacFlag   = FALSE;
     expandHexFlag = TRUE;
@@ -5078,8 +5110,12 @@ void getopts(int argc, char * const argv[])
             case 'C':
                 strncpy(word, optarg, 255);
                 Uprcase(word);
-                if (FindCPU(word))
-                    strcpy(defCPU, word);
+                if (!FindCPU(word))
+                {
+                    fprintf(stderr,"CPU type '%s' unknown\n",word);
+                    usage();
+                }
+                strcpy(defCPU, word);
                 break;
 
             case '?':
@@ -5145,7 +5181,7 @@ void getopts(int argc, char * const argv[])
 }
 
 
-int main (int argc, char * const argv[])
+int main(int argc, char * const argv[])
 {
     int i;
 

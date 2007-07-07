@@ -34,6 +34,7 @@ testit 65c816
 testit 6800
 testit 6801
 testit 6805
+testit 68hcs08
 testit 6809
 testit 8048
 testit 8051

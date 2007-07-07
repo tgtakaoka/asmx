@@ -554,6 +554,7 @@ PROCESSOR
      68HC711 68HC811
      68HC99
      68HC16        Motorola 68HC16
+     68HSC08       Motorola 68HSC08 (6805 variant)
      68K 68000     Motorola 68000
      68010         Motorola 68010
      8051          Intel 8051 variants
@@ -1258,14 +1259,32 @@ Version 2.0b2 changes (2007-02-22)
 
  - - -
 
+Version 2.0b3 changes (2007-07-07)
+
+* Added 68HSC08 support to 6805 assembler.
+
+* Fixed a bug with some direct-page instructions in the 6805 assembler.
+
+* Invalid CPU type in -C command line option is now a fatal error.
+
+* Fixed a really old bug in the expression evaluator that would allow missing
+  operands, then fixed some bugs in the 8048 assembler that the fix brought out.
+
+* Fixed a serious bug in conditonal assembly. In an IF...ELSIF...ELSE...ENDIF block, if
+  any condition before the last ELSIF was true, the ELSE block would be assembled.
+
+ - - -
+
 To do:
+
+** add an end value for the -b command line option?
+
+** error or warning if -b and data is out of range? (reset warning at ORG?)
+
+* DS should be scaled by the WORDSIZE?
 
 * The SUBROUTINE pseudo-op needs to be tweaked.  It should either define the subroutine name
   as a label, or use the label on the left side of the line as the name of the subroutine.
-
-* add an end value for the -b command line option?
-
-* error or warning if -b and data is out of range?
 
 * change "out of range" warnings in DB/DW to errors?
 
@@ -1290,10 +1309,12 @@ To do:
 * 6809 WARNDP pseudo-op? (now I can't remember what this was supposed to be)
   (maybe it was for "this could be direct page" warnings on absolute addressing mode?)
 
-* Linkable/relocatable object code files (long term 3.0 goal).
+* Linkable/relocatable object code files (long-term 3.0 goal).
 
  - - -
 
 BUGS:
 
 (none currently known)
+
+* "MOVE.B" by itself generates too many errors

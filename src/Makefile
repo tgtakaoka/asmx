@@ -2,7 +2,7 @@
 # this should work with GNU make, gcc, and bash shell
 
 # version number
-VERSION = 2.0b2
+VERSION = 2.0b3
 
 # C compiler target architecture
 #   this is the setting for OS X to create a universal PPC/Intel binary

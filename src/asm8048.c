@@ -253,6 +253,7 @@ int I8048_DoCPUOpcode(int typ, int parm)
                 case 1: // Pn,#imm = parm + 0x48 + port (not 0xD0 or 0x20)
                 case 2:
                     if (Comma()) break;
+                    if (Expect("#")) break;
                     val = EvalByte();
                     if (parm == 0xD0 || parm == 0x20) { IllegalOperand(); break; }
                     InstrBB(parm + 0x48 + reg1, val);
@@ -260,6 +261,7 @@ int I8048_DoCPUOpcode(int typ, int parm)
 
                 case 3: // BUS,#imm = parm + 0x48 (not 0xD0 or 0x20)
                     if (Comma()) break;
+                    if (Expect("#")) break;
                     val = EvalByte();
                     if (parm == 0xD0 || parm == 0x20) { IllegalOperand(); break; }
                     InstrBB(parm + 0x48, val);

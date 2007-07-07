@@ -13,12 +13,21 @@ enum
     o_Arith,        // arithmetic instructions with multiple addressing modes
     o_Store,        // STA/STX/JMP/JSR - same as o_Arith except no immediate allowed
 
+    o_Inh08,        // 68HCS08 inherent instructions
+    o_Rel08,        // 68HCS08 branch instructions and DBNZA/DBNZX
+    o_AIS_AIX,      // 68HCS08 AIS and AIX instructions
+    o_LDHX,         // 68HCS08 LDHX, STHX, CPHX instructions
+    o_CBEQA,        // 68HCS08 CBEQA, CBEQX instructions
+    o_CBEQ,         // 68HCS08 CBEQ, DBNZ instructions
+    o_MOV,          // 68HCS08 MOV instruction
+
 //  o_Foo = o_LabelOp,
 };
 
 enum cputype
 {
     CPU_6805,
+    CPU_68HCS08
 };
 
 struct OpcdRec M6805_opcdTab[] =
@@ -122,7 +131,64 @@ struct OpcdRec M6805_opcdTab[] =
     {"BRSET", o_BRelative,0x00},
     {"BRCLR", o_BRelative,0x01},
 
-    {"",     o_Illegal, 0}
+    // 68HCS08 opcodes
+
+    {"DIV",   o_Inh08,    0x52},
+    {"NSA",   o_Inh08,    0x62},
+    {"DAA",   o_Inh08,    0x72},
+    {"BGND",  o_Inh08,    0x82},
+    {"TAP",   o_Inh08,    0x84},
+    {"TPA",   o_Inh08,    0x85},
+    {"PULA",  o_Inh08,    0x86},
+    {"PSHA",  o_Inh08,    0x87},
+    {"PULX",  o_Inh08,    0x88},
+    {"PSHX",  o_Inh08,    0x89},
+    {"PULH",  o_Inh08,    0x8A},
+    {"PSHH",  o_Inh08,    0x8B},
+    {"CLRH",  o_Inh08,    0x8C},
+    {"TXS",   o_Inh08,    0x94},
+    {"TSX",   o_Inh08,    0x95},
+
+    {"BGE",   o_Rel08,    0x90},
+    {"BLT",   o_Rel08,    0x91},
+    {"BGT",   o_Rel08,    0x92},
+    {"BLE",   o_Rel08,    0x93},
+    {"DBNZA", o_Rel08,    0x4B},
+    {"DBNZX", o_Rel08,    0x5B},
+
+    {"AIS",   o_AIS_AIX,  0xA7},
+    {"AIX",   o_AIS_AIX,  0xAF},
+
+    {"LDHX",  o_LDHX,     0x0E},
+    {"STHX",  o_LDHX,     0x0F},
+    {"CPHX",  o_LDHX,     0x03},
+/*
+45 nnnn   LDHX #imm
+55 nn     LDHX dir
+32 nnnn   LDHX ext
+9EAE      LDHX ,X
+9EBE nnnn LDHX nnnn,X
+9ECE nn   LDHX nn,X
+9EFE nn   LDHX nn,SP
+
+35 nn     STHX dir
+96 nnnn   STHX ext
+9EFF nn   STHX nn,SP
+
+3E nnnn   CPHX #imm
+65 nnnn   CPHX nnnn,X
+75 nn     CPHX nn,X
+9EF3 nn   CPHX nn,SP
+*/
+    {"CBEQA", o_CBEQA, 0x41},
+    {"CBEQX", o_CBEQA, 0x51},
+
+    {"CBEQ",  o_CBEQ, 0x01},
+    {"DBNZ",  o_CBEQ, 0x0B},
+
+    {"MOV",   o_MOV,  0},
+
+    {"",      o_Illegal, 0}
 };
 
 
@@ -140,10 +206,14 @@ int M6805_DoCPUOpcode(int typ, int parm)
 
     switch(typ)
     {
+        case o_Inh08:       // 68HCS08 inherent instructions
+            if (curCPU != CPU_68HCS08) return 0;
         case o_Inherent:
             InstrB(parm);
             break;
 
+        case o_Rel08:       // 68HCS08 branch instructions and DBNZA/DBNZX
+            if (curCPU != CPU_68HCS08) return 0;
         case o_Relative:
             val = EvalBranch(2);
             InstrBB(parm,val);
@@ -165,14 +235,24 @@ int M6805_DoCPUOpcode(int typ, int parm)
             oldLine = linePtr;
             token = GetWord(word);  // look for ",X"
             if (token == 0)
-                InstrBW(parm + 0x30, val);  // no ",X", so must be direct
+                InstrBB(parm + 0x30, val);  // no ",X", so must be direct
             else if (token == ',')
             {
-                if (Expect("X")) break;
+                switch((reg = GetReg("X SP")))
+                {
+                    default:
+                    case reg_None:
+                        IllegalOperand();
+                    case reg_EOL: // EOL
+                        break;
 
-                if (evalKnown && val == 0) // 0,X
-                     InstrB(parm + 0x70);
-                else InstrBB(parm + 0x60, val); // ix1,X
+                    case 1:
+                        parm = parm + 0x9E00;
+                    case 0:
+                        if (evalKnown && val == 0 && parm < 256) // 0,X
+                             InstrB(parm + 0x70);
+                        else InstrXB(parm + 0x60, val); // ix1,X / sp1,SP
+                }
             }
             else
             {
@@ -219,21 +299,40 @@ int M6805_DoCPUOpcode(int typ, int parm)
                 if (token == 0) // dir or ext
                 {
                     if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == 0) || force == '<'))
-// FIXME: should warn about force-byte with non-byte value
+                    {
+                        CheckByte(val);
                         InstrBB(parm + 0xB0, val);  // <$xx
+                    }
                     else
                         InstrBW(parm + 0xC0, val);   // >$xxxx
                 }
                 else if (token == ',') // ix1,X or ix2,X
                 {
-                    if (Expect("X")) break;
+                    switch((reg = GetReg("X SP")))
+                    {
+                        default:
+                        case reg_None:
+                            IllegalOperand();
+                        case reg_EOL: // EOL
+                            break;
 
-                    if (evalKnown && val == 0) // 0,X
-                         InstrB(parm + 0xF0);
-                    else if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == 0) || force == '<'))
-// FIXME: should warn about force-byte with non-byte value
-                         InstrBB(parm + 0xE0, val); // ix1,X
-                    else InstrBW(parm + 0xD0, val); // ix2,X
+                        case 1:
+                            if (parm == 0x0C || parm == 0x0D) // JMP / JSR
+                            {
+                                BadMode();
+                                break;
+                            }
+                            parm = parm + 0x9E00;
+                        case 0:
+                            if (evalKnown && val == 0 && parm < 256) // 0,X
+                                 InstrB(parm + 0xF0);
+                            else if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == 0) || force == '<'))
+                            {
+                                 CheckByte(val);
+                                 InstrXB(parm + 0xE0, val); // ix1,X / sp1,SP
+                            }
+                            else InstrXW(parm + 0xD0, val); // ix2,X / sp2,SP
+                    }
                     break;
                 }
                 else
@@ -280,6 +379,213 @@ int M6805_DoCPUOpcode(int typ, int parm)
             InstrBBB(parm + val * 2, val2, val3);
             break;
 
+        case o_AIS_AIX:      // 68HCS08 AIS and AIX instructions
+            if (Expect("#")) break; // immediate only
+            val = Eval();
+            CheckStrictByte(val);
+            InstrBB(parm, val);
+            break;
+
+        case o_LDHX:        // 68HCS08 LDHX, STHX, CPHX instructions
+            oldLine = linePtr;
+            token = GetWord(word);
+            if (token=='#') // 45 LDHX #imm / 65 CPHX #imm
+            {
+                if (parm == 0x0F)
+                    BadMode();
+                else
+                {
+                    val = Eval();
+                    InstrBW(0x45 + (parm & 0x01)*0x20,val);
+                    break;
+                }
+            }
+            else if (token == ',') // 9EAE LDHX ,X
+            {
+                if (parm != 0x0E)
+                    BadMode();
+                else
+                {
+                    if (Expect("X")) break;
+                    InstrX(0x9EAE);
+                    break;
+                }
+            }
+            else
+            {
+                force = 0;
+
+                if (token == '<' || token == '>')
+                    force = token;
+                else
+                    linePtr = oldLine;
+
+                val = Eval();
+
+                oldLine = linePtr;
+                token = GetWord(word);
+                if (token == 0) // dir or ext
+                {
+//    {"LDHX",  o_LDHX,     0x0E},
+//55 nn     LDHX dir
+//32 nnnn   LDHX ext
+//    {"STHX",  o_LDHX,     0x0F},
+//35 nn     STHX dir
+//96 nnnn   STHX ext
+//    {"CPHX",  o_LDHX,     0x03},
+//75 nn     CPHX dir
+//3E nnnn   CPHX ext
+                        if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == 0) || force == '<'))
+                        {
+                             CheckByte(val);
+                             switch(parm)
+                             {
+                                 case 0x0E: parm = 0x55; break; // LDHX
+                                 case 0x0F: parm = 0x35; break; // STHX
+                                 default:   parm = 0x75; break; // CPHX
+                             }
+                             InstrBB(parm, val); // ix1,X / sp1,SP
+                        }
+                        else
+                        {
+                             switch(parm)
+                             {
+                                 case 0x0E: parm = 0x32; break; // LDHX
+                                 case 0x0F: parm = 0x96; break; // STHX
+                                 default:   parm = 0x3E; break; // CPHX
+                             }
+                             InstrBW(parm, val); // ix2,X / sp2,SP
+                        }
+                }
+                else
+                {
+                    linePtr = oldLine;
+                    if (Comma()) break;
+//9EFE nn   LDHX nn,SP
+//9EFF nn   STHX nn,SP
+//9EF3 nn   CPHX nn,SP
+//9ECE nn   LDHX nn,X
+//9EBE nnnn LDHX nnnn,X
+                    switch((reg = GetReg("X SP")))
+                    {
+                        default:
+                        case reg_None:
+                            IllegalOperand();
+                        case reg_EOL: // EOL
+                            break;
+
+                        case 0: // X
+                            if (parm != 0x0E) // LDHX
+                            {
+                                BadMode();
+                                break;
+                            }
+                            if (((force != '>' && evalKnown && (val & 0xFF00) >> 8 == 0) || force == '<'))
+                            {
+                                 CheckByte(val);
+                                 InstrXB(parm + 0x9EC0, val); // ix1,X
+                            }
+                            else InstrXW(parm + 0x9EB0, val); // ix2,X
+                            break;
+
+                        case 1: // SP
+                            CheckByte(val);
+                            InstrXB(parm + 0x9EF0, val); // sp1,SP
+                            break;
+                    }
+                }
+            }
+            break;
+
+        case o_CBEQA:       // 68HCS08 CBEQA, CBEQX instructions
+            if (Expect("#")) break; // immediate only
+            val = EvalByte();
+            if (Comma()) break;
+            val2 = EvalBranch(3);
+            InstrBBB(parm,val,val2);
+            break;
+
+        case o_CBEQ:        // 68HCS08 CBEQ, DBNZ instructions
+            oldLine = linePtr;
+            if (GetWord(word) == ',')
+            {
+                if (Expect("X")) break;
+                if (parm == 0x01 && Expect("+")) break;
+                if (Comma()) break;
+                val = EvalBranch(2);
+                InstrBB(parm + 0x70,val);
+            }
+            else
+            {
+                linePtr = oldLine;
+                val = EvalByte();
+                if (Comma()) break;
+                oldLine = linePtr;
+                switch(reg=(GetReg("X SP")))
+                {
+                    case 0: // X
+                        if (parm == 0x01 && GetWord(word) != '+')
+                        {
+                    case reg_None:
+                            linePtr = oldLine;
+                            val2 = EvalBranch(3);
+                            InstrBBB(parm + 0x30,val,val2);
+                            break;
+                        }
+                    case 1: // SP
+                        {
+                            if (reg == 1) parm = parm + 0x9E00;
+                            if (Comma()) break;
+                            if (reg == 1) val2 = EvalBranch(4);
+                                     else val2 = EvalBranch(3);
+                            InstrXBB(parm + 0x60,val,val2);
+                            break;
+                        }
+
+                    default:
+                        IllegalOperand();
+                    case reg_EOL: // EOL
+                        break;
+                }
+            }
+            break;
+
+        case o_MOV:         // 68HCS08 MOV instruction
+            oldLine = linePtr;
+            switch (GetWord(word))
+            {
+                case ',':
+                    if (Expect("X")) break;
+                    if (Expect("+")) break;
+                    if (Comma()) break;
+                    val = EvalByte();
+                    InstrBB(0x7E,val); // MOV ,X+,dir
+                    break;
+
+                case '#':
+                    val = EvalByte();
+                    if (Comma()) break;
+                    val2 = EvalByte();
+                    InstrBBB(0x6E,val,val2); // MOV imm,dir
+                    break;
+
+                default:
+                    linePtr = oldLine;
+                    val = EvalByte();
+                    if (Comma()) break;
+                    oldLine = linePtr;
+                    if (GetReg("X")==0 && (GetReg("+")==0))
+                        InstrBB(0x5E,val); // 5E MOV dir,X+
+                    else
+                    {
+                        linePtr = oldLine;
+                        val2 = EvalByte();
+                        InstrBBB(0x4E,val,val2); // 4E MOV dir,dir
+                    }
+                    break;
+            }
+            break;
+
         default:
             return 0;
             break;
@@ -293,5 +599,6 @@ void Asm6805Init(void)
     char *p;
 
     p = AddAsm(versionName, &M6805_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "6805", CPU_6805, BIG_END, ADDR_16, LIST_24, 8, M6805_opcdTab);
+    AddCPU(p, "6805",    CPU_6805,    BIG_END, ADDR_16, LIST_24, 8, M6805_opcdTab);
+    AddCPU(p, "68HCS08", CPU_68HCS08, BIG_END, ADDR_16, LIST_24, 8, M6805_opcdTab);
 }
