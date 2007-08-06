@@ -39,8 +39,10 @@ testit 6809
 testit 8048
 testit 8051
 testit 8085u
+#testit arm
 testit f8
 testit jerry
+testit thumb
 testit tom
 testit gbz80
 testit z80

@@ -997,7 +997,7 @@ ABSOLUTE:
 }
 
 
-void SetMultiReg(int reg, int *regs, bool *warned)
+void Set68KMultiReg(int reg, int *regs, bool *warned)
 {
     if (!*warned && *regs & (1 << reg))
     {
@@ -1008,7 +1008,7 @@ void SetMultiReg(int reg, int *regs, bool *warned)
 }
 
 
-int GetMultiRegs(void)
+int Get68KMultiRegs(void)
 {
     int     reg1,reg2,regs,i;
     Str255  word;
@@ -1025,8 +1025,14 @@ int GetMultiRegs(void)
     {
         reg1 = GetReg(DA_regs);
         if (reg1 == 16) reg1 = 15; // SP -> A7
+        if (reg1 < 0)
+        {
+            IllegalOperand();      // abort if not valid register
+            break;
+        }
+
         // set single register bit
-        SetMultiReg(reg1, &regs, &warned);
+        Set68KMultiReg(reg1, &regs, &warned);
 
         // check for - or /
         oldLine = linePtr;
@@ -1045,12 +1051,12 @@ int GetMultiRegs(void)
             if (reg1 < reg2)
             {
                 for (i = reg1 + 1 ; i <= reg2; i++)
-                    SetMultiReg(i, &regs, &warned);
+                    Set68KMultiReg(i, &regs, &warned);
             }
             else if (reg1 > reg2)
             {
                 for (i = reg1 - 1 ; i >= reg2; i--)
-                    SetMultiReg(i, &regs, &warned);
+                    Set68KMultiReg(i, &regs, &warned);
             }
             oldLine = linePtr;  // commit line position
             token = GetWord(word);
@@ -1613,7 +1619,7 @@ int M68K_DoCPUOpcode(int typ, int parm)
 
             if (reg1 >= 0) // register-to-memory
             {
-                reg2 = GetMultiRegs();
+                reg2 = Get68KMultiRegs();
                 if (Comma()) break;
                 if (GetEA(TRUE, -1, &ea1))
                 {
@@ -1638,7 +1644,7 @@ int M68K_DoCPUOpcode(int typ, int parm)
                 if (GetEA(TRUE, -1, &ea1))
                 {
                     if (Comma()) break;
-                    reg2 = GetMultiRegs();
+                    reg2 = Get68KMultiRegs();
                     val = ea1.mode & 0x38;
                     if (val == 0x00 || val == 0x08 || val == 0x20)
                         BadMode();

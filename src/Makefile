@@ -2,7 +2,7 @@
 # this should work with GNU make, gcc, and bash shell
 
 # version number
-VERSION = 2.0b3
+VERSION = 2.0b4
 
 # C compiler target architecture
 #   this is the setting for OS X to create a universal PPC/Intel binary
@@ -75,10 +75,10 @@ it: clean install-strip zip test
 zip: asmx # build everything first to check for errors
 	rm -f ../src/.DS_Store ../test/.DS_Store ../test/rel/.DS_Store
 	-mv -f ../asmx-$(VERSION).zip ../asmx-$(VERSION).zip.old
-	cd .. && zip -rq asmx-$(VERSION).zip Makefile README.txt src/*.c src/*.h src/Makefile test
+	cd .. && zip -rq asmx-$(VERSION).zip Makefile README.txt asmx-doc.html src/*.c src/*.h src/Makefile test
 
 .PHONY: test
-test:
+test: asmx
 # note: asmx must be installed first!
 	cd ../test && testit
 

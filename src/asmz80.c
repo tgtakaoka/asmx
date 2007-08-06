@@ -1072,7 +1072,7 @@ int Z80_DoCPUOpcode(int typ, int parm)
             else
             {
                 reg1 = FindReg(word,conds);
-                if (reg1 == reg_None)
+                if (reg1 < 0)
                 {
                     linePtr = oldLine;
                     val = Eval();

@@ -31,7 +31,7 @@ struct OpcdRec
 {
     OpcdStr         name;       // opcode name
     short           typ;        // opcode type
-    u_short         parm;       // opcode parameter
+    u_long          parm;       // opcode parameter
 };
 typedef struct OpcdRec *OpcdPtr;
 

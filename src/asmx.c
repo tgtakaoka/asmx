@@ -522,6 +522,8 @@ void AsmInit(void)
     ASSEMBLER(F8);
     ASSEMBLER(Jag);
     ASSEMBLER(Z80);
+    ASSEMBLER(Thumb);
+    ASSEMBLER(ARM);
 
 //  strcpy(defCPU,"Z80");     // hard-coded default for testing
 
@@ -1314,6 +1316,7 @@ void BadMode()
 // find a register name
 // regList is a space-separated list of register names
 // FindReg returns:
+//       -2 (aka reg_EOL) if empty string
 //      -1 (aka reg_None) if no register found
 //      0 if regName is the first register in regList
 //      1 if regName is the second register in regList
@@ -1322,6 +1325,8 @@ int FindReg(const char *regName, const char *regList)
 {
     const char *p;
     int i;
+
+    if (!regName[0]) return reg_EOL;
 
     i = 0;
     while (*regList)
@@ -1780,15 +1785,24 @@ void DumpMacroTab(void)
  *  FindOpcodeTab - finds an entry in an opcode table
  */
 
-bool FindOpcodeTab(OpcdPtr p, char *name, int *typ, int *parm)
+// special compare for opcodes to allow "*" wildcard
+int opcode_strcmp(const char *s1, const char *s2)
+{
+    while (*s1 == *s2++)
+        if (*s1++ == 0) return 0;
+    if (*s1 == '*') return 0; // this is the magic
+    return (*s1 - *(s2 - 1));
+}
 
+
+OpcdPtr FindOpcodeTab(OpcdPtr p, char *name, int *typ, int *parm)
 {
     bool found = FALSE;
 
 //  while (p -> typ != o_Illegal && !found)
     while (*(p -> name) && !found)
     {
-        found = (strcmp(p -> name, name) == 0);
+        found = (opcode_strcmp(p -> name, name) == 0);
         if (!found)
             p++;
         else
@@ -1798,7 +1812,8 @@ bool FindOpcodeTab(OpcdPtr p, char *name, int *typ, int *parm)
         }
     }
 
-    return found;
+    if (!found) p = NULL; // because this is an array, not a linked list
+    return p;
 }
 
 
@@ -1807,19 +1822,49 @@ bool FindOpcodeTab(OpcdPtr p, char *name, int *typ, int *parm)
  *               opcode tables, or as a macro name
  */
 
-void FindOpcode(char *name, int *typ, int *parm, MacroPtr *macro)
+OpcdPtr GetFindOpcode(char *opcode, int *typ, int *parm, MacroPtr *macro)
 {
     *typ   = o_Illegal;
     *parm  = 0;
     *macro = NULL;
 
-    if (opcdTab && FindOpcodeTab(opcdTab,  name, typ, parm)) return;
-    if (name[0] == '.') name++; // allow pseudo-ops to be invoked as ".OP"
-    if (FindOpcodeTab((OpcdPtr) &opcdTab2, name, typ, parm)) return;
+    OpcdPtr p;
+    int len;
 
-    *macro = FindMacro(name);
-    if (*macro)
-        *typ = o_MacName;
+    p = NULL;
+    if (GetOpcode(opcode))
+    {
+        if (opcdTab) p = FindOpcodeTab(opcdTab,  opcode, typ, parm);
+        if (!p)
+        {
+            if (opcode[0] == '.') opcode++; // allow pseudo-ops to be invoked as ".OP"
+            p = FindOpcodeTab((OpcdPtr) &opcdTab2, opcode, typ, parm);
+        }
+        if (p)
+        {   // if wildcard was matched, back up linePtr
+            // NOTE: if wildcard matched an empty string, linePtr will be
+            //       unchanged and point to whitespace
+            len = strlen(p->name);
+            if (len && (p->name[len-1] == '*'))
+            {
+                linePtr = linePtr - (strlen(opcode) - len + 1);
+            }
+        }
+        else
+        {
+            if ((*macro = FindMacro(opcode)))
+            {
+                *typ = o_MacName;
+                p = opcdTab2; // return dummy non-null valid opcode pointer
+            }
+        }
+    }
+if (pass == 2 && !strcmp(opcode,"FROB"))
+{
+    printf("*** FROB typ=%d, parm=%d, macro=%.8X, p=%.8X\n",*typ,*parm,(int) macro,(int) p);
+}
+
+    return p;
 }
 
 
@@ -4200,8 +4245,7 @@ void DoLabelOp(int typ, int parm, char *labl)
                     }
 
                     typ = 0;
-                    if (GetOpcode(opcode))
-                        FindOpcode(opcode, &typ, &parm, &xmacro);
+                    GetFindOpcode(opcode, &typ, &parm, &xmacro);
 
                     switch(typ)
                     {
@@ -4382,8 +4426,7 @@ void DoLabelOp(int typ, int parm, char *labl)
                     }
 
                     typ = 0;
-                    if (GetOpcode(opcode))
-                        FindOpcode(opcode, &typ, &parm, &xmacro);
+                    GetFindOpcode(opcode, &typ, &parm, &xmacro);
 
                     switch(typ)
                     {
@@ -4590,10 +4633,8 @@ void DoLine()
         listThisLine = FALSE;
 
         // inside failed IF statement
-        if (GetOpcode(opcode))
+        if (GetFindOpcode(opcode, &typ, &parm, &macro))
         {
-            FindOpcode(opcode, &typ, &parm, &macro);
-
             switch(typ)
             {
                 case o_IF: // nested IF inside failed IF should stay failed
@@ -4665,15 +4706,12 @@ void DoLine()
     }
     else
     {
-        token = GetOpcode(opcode);
-        if (token == 0 || token == '*')         // line with label only
-        {
+        if (!GetFindOpcode(opcode, &typ, &parm, &macro) && !opcode[0])
+        {   // line with label only
             DefSym(labl,locPtr / wordDiv,FALSE,FALSE);
         }
         else
         {
-            FindOpcode(opcode, &typ, &parm, &macro);
-
             if (typ == o_Illegal)
             {
                 if (opcode[0] == '.' && SetCPU(opcode+1))
@@ -4935,8 +4973,7 @@ void DoPass()
 
             if (line[0]==' ' || line[0]=='\t')          // ignore labels (this isn't the right way)
             {
-                GetOpcode(opcode);
-                FindOpcode(opcode, &typ, &parm, &macro);
+                GetFindOpcode(opcode, &typ, &parm, &macro);
                 if (typ == o_LIST || typ == o_OPT)
                 {
                     DoLabelOp(typ,parm,"");

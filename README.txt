@@ -561,6 +561,12 @@ PROCESSOR
      8080          Intel 8080
      8085          Intel 8085
      8085U         Intel 8085 with undocumented instructions
+     ARM           ARM (32-bit little-endian)
+     ARM_BE        ARM big-endian
+     ARM_LE        ARM little-endian
+     THUMB         ARM Thumb (16-bit little-endian)
+     THUMB_BE      ARM Thumb big-endian
+     THUMB_LE      ARM Thumb little-endian
      F8            Fairchild F8
      TOM           Atari Jaguar GPU
      JERRY         Atari Jaguar DSP
@@ -734,7 +740,7 @@ Version 1.2 changes (September 1996)
 
  - - -
 
-Version 1.3 changes (December 1996)
+Version 1.3 changes (1996-12-17)
 
 * No more than one macro could be defined, because the macro list wasn't
   being linked properly.
@@ -743,7 +749,7 @@ Version 1.3 changes (December 1996)
 
  - - -
 
-Version 1.4 changes (February 2002)
+Version 1.4 changes (February 1998)
 
 * Added FCC pseudo-op
 
@@ -1275,11 +1281,28 @@ Version 2.0b3 changes (2007-07-07)
 
  - - -
 
+Version 2.0b4 changes (2007-08-06)
+
+* Started adding ARM and ARM Thumb instruction sets, at the ARM5 level.
+  (Thumb is currently complete, ARM is missing LDC/STC and ADR/ADRL.)
+
+* Changed 'parm' in opcode table to a u_long to handle more complex instruction sets.
+
+* Changed opcode parser to accept opcodes ending in wildcards.
+
+ - - -
+
 To do:
 
 ** add an end value for the -b command line option?
 
 ** error or warning if -b and data is out of range? (reset warning at ORG?)
+
+** make test files for assembler pseudo-ops
+
+** move checkreg to asmx.c
+
+** ASSERT <expr> pseudo-op? If expr is false, generate an error.
 
 * DS should be scaled by the WORDSIZE?
 

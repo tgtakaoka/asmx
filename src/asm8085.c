@@ -182,7 +182,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_MOV:
             GetWord(word);
             reg1 = FindReg(word,I8085_regs1);
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
             {
@@ -196,7 +196,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
                 {
                     GetWord(word);
                     reg2 = FindReg(word,I8085_regs1);
-                    if (reg2 == -1 || (reg1 == 6 && reg2 == 6))
+                    if (reg2 < 0 || (reg1 == 6 && reg2 == 6))
                         IllegalOperand();
                     else
                         InstrB(0x40 + (reg1 << 3) + reg2);
@@ -214,7 +214,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_Arith:
             GetWord(word);
             reg1 = FindReg(word,I8085_regs1);
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
                 InstrB(parm + reg1);
@@ -223,7 +223,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_PushPop:
             GetWord(word);
             reg1 = FindReg(word,"B D H PSW");
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
                 InstrB(parm + (reg1 << 4));
@@ -232,7 +232,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_MVI:
             GetWord(word);
             reg1 = FindReg(word,I8085_regs1);
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
             {
@@ -253,7 +253,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_LXI:
             GetWord(word);
             reg1 = FindReg(word,I8085_regs2);
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
             {
@@ -274,7 +274,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_INR:
             GetWord(word);
             reg1 = FindReg(word,I8085_regs1);
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
                 InstrB(parm + (reg1 << 3));
@@ -283,7 +283,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_INX:
             GetWord(word);
             reg1 = FindReg(word,I8085_regs2);
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
                 InstrB(parm + (reg1 << 4));
@@ -292,7 +292,7 @@ int I8085_DoCPUOpcode(int typ, int parm)
         case o_STAX:
             GetWord(word);
             reg1 = FindReg(word,"B D");
-            if (reg1 == -1)
+            if (reg1 < 0)
                 IllegalOperand();
             else
                 InstrB(parm + (reg1 << 4));
