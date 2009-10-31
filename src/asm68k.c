@@ -1285,6 +1285,7 @@ int M68K_DoCPUOpcode(int typ, int parm)
 
             oldLine = linePtr;
             reg1 = GetReg("CCR SR USP");
+            if (reg1 == reg_EOL) break;
             if (reg1 >= 0)
             {
                 if (Comma()) break;
@@ -1353,6 +1354,9 @@ int M68K_DoCPUOpcode(int typ, int parm)
                             {
                                 InstrW(0x4E60 + (ea1.mode & 0x0007));
                             }
+                            break;
+
+                        case reg_EOL:
                             break;
 
                         default:
@@ -1942,7 +1946,7 @@ void Asm68KInit(void)
     char *p;
 
     p = AddAsm(versionName, &M68K_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "68K",    CPU_68000, BIG_END, ADDR_24, LIST_24, 8, M68K_opcdTab);
-    AddCPU(p, "68000",  CPU_68000, BIG_END, ADDR_24, LIST_24, 8, M68K_opcdTab);
-    AddCPU(p, "68010",  CPU_68010, BIG_END, ADDR_24, LIST_24, 8, M68K_opcdTab);
+    AddCPU(p, "68K",    CPU_68000, BIG_END, ADDR_24, LIST_24, 8, 0, M68K_opcdTab);
+    AddCPU(p, "68000",  CPU_68000, BIG_END, ADDR_24, LIST_24, 8, 0, M68K_opcdTab);
+    AddCPU(p, "68010",  CPU_68010, BIG_END, ADDR_24, LIST_24, 8, 0, M68K_opcdTab);
 }

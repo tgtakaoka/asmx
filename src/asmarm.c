@@ -32,7 +32,7 @@ enum
 };
 
 const char regs[] = "R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP LR PC";
-const char cops[] = "P0 P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15";
+const char pregs[] = "P0 P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15";
 const char cregs[] = "CR0 CR1 CR2 CR3 CR4 CR5 CR6 CR7 CR8 CR9 CR10 CR11 CR12 CR13 CR14 CR15";
 const char shifts[] = "LSL LSR ASR ROR RRX ASL";
 
@@ -77,7 +77,7 @@ struct OpcdRec ARM_opcdTab[] =
     {"BLLE",    o_Branch,       0xDB000000},
     {"BLAL",    o_Branch,       0xEB000000},
 
-    {"BX*",     o_OneReg,       0x012FFF10},
+    {"BX*",     o_OneReg,       0x012FFF10}, // ARM5/ARM4T
 
     {"CMN*",    o_OneRegShift,  0x01700000},
     {"CMP*",    o_OneRegShift,  0x01500000},
@@ -102,67 +102,48 @@ struct OpcdRec ARM_opcdTab[] =
 
     {"BKPT",    o_BKPT,         0xE1200070},
 
-    {"BLX*",    o_BLX,          0x012FFF30},
+    {"BLX*",    o_BLX,          0x012FFF30}, // ARM5
 
-    {"CLZ*",    o_CLZ,          0x016F0F10},
+    {"CLZ*",    o_CLZ,          0x016F0F10}, // ARM5
 
-    {"MUL*",    o_MUL,          0x00000090},
+    {"MUL*",    o_MUL,          0x00000090}, // ARM2
 
-    {"SWP*",    o_SWP,          0x01000090},
+    {"SWP*",    o_SWP,          0x01000090}, // ARM2a/ARM3
 
     {"LDM*",    o_LDM_STM,      0x00100000},
     {"STM*",    o_LDM_STM,      0x00000000},
 
-    {"LDR*",    o_LDR_STR,      0x00100000},
-    {"STR*",    o_LDR_STR,      0x00000000},
+    {"LDR*",    o_LDR_STR,      0x00100000}, // LDRH/LDRSB/LDRSH = ARM4
+    {"STR*",    o_LDR_STR,      0x00000000}, // STRH = ARM4
 
-    {"MRS*",    o_MRS,          0x010F0000},
+    {"MRS*",    o_MRS,          0x010F0000}, // ARM3
 
-    {"MSR*",    o_MSR,          0x0120F000},
+    {"MSR*",    o_MSR,          0x0120F000}, // ARM3
 
-    {"MLA*",    o_MLA,          0x00200090},
+    {"MLA*",    o_MLA,          0x00200090}, // ARM2
 
-    {"SMLAL*",  o_MLAL,         0x00E00090},
-    {"SMULL*",  o_MLAL,         0x00C00090},
-    {"UMLAL*",  o_MLAL,         0x00A00090},
-    {"UMULL*",  o_MLAL,         0x00800090},
+    {"SMLAL*",  o_MLAL,         0x00E00090}, // ARM-M
+    {"SMULL*",  o_MLAL,         0x00C00090}, // ARM-M
+    {"UMLAL*",  o_MLAL,         0x00A00090}, // ARM-M
+    {"UMULL*",  o_MLAL,         0x00800090}, // ARM-M
 
-    {"CDP*",    o_CDP,          0x0E000000},
+    {"CDP*",    o_CDP,          0x0E000000}, // ARM2/5
 
-    {"MCR*",    o_MCR_MRC,      0x0E000010},
-    {"MRC*",    o_MCR_MRC,      0x0E100010},
+    {"MCR*",    o_MCR_MRC,      0x0E000010}, // ARM2/5
+    {"MRC*",    o_MCR_MRC,      0x0E100010}, // ARM2/5
 
-    {"LDC*",    o_LDC_STC,      0x0C100000},
-    {"STC*",    o_LDC_STC,      0x0C000000},
+    {"LDC*",    o_LDC_STC,      0x0C100000}, // ARM2/5
+    {"STC*",    o_LDC_STC,      0x0C000000}, // ARM2/5
 
-    {"ADR",     o_ADR,          0},
-    {"ADRL",    o_ADR,          1},
+    {"ADR*",    o_ADR,          0},          // pseudo-instruction
 
-    {"NOP",     o_Implied,      0xE1A00000}, // MOV R0,R0
+    {"NOP",     o_Implied,      0xE1A00000}, // pseudo-instruction = MOV R0,R0
 
     {"",        o_Illegal,      0}
 };
 
 
 // --------------------------------------------------------------
-
-
-// note: this is a candidate for moving to asmx.c
-int ARMCheckReg(int reg) // may want to add a maxreg parameter
-{
-    if (reg == reg_EOL)
-    {
-        MissingOperand();      // abort if not valid register
-        return 1;
-    }
-//  if ((reg < 0) || (reg > maxReg))
-    if (reg < 0)
-    {
-        IllegalOperand();      // abort if not valid register
-        return 1;
-    }
-    return 0;
-}
 
 
 long ARMImmed(u_long val)
@@ -208,7 +189,7 @@ bool ARMShifter(u_long *shift)
     {
         reg1 = FindReg(word,regs);
         if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-        if (ARMCheckReg(reg1)) return 1;
+        if (CheckReg(reg1)) return 1;
 
         oldLine = linePtr;
         token = GetWord(word);
@@ -241,7 +222,7 @@ bool ARMShifter(u_long *shift)
                 {
                     reg2 = FindReg(word,regs);
                     if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-                    if (ARMCheckReg(reg2)) return 1;
+                    if (CheckReg(reg2)) return 1;
 
                     *shift = (typ << 5) | (1 << 4) | reg1 | (reg2 << 8);
                 }
@@ -309,7 +290,7 @@ bool ARMAddrMode2(u_long *mode, bool post)
 
     reg1 = GetReg(regs);
     if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-    if (ARMCheckReg(reg1)) return 1;
+    if (CheckReg(reg1)) return 1;
 
     oldLine = linePtr;
     token = GetWord(word);
@@ -343,7 +324,7 @@ bool ARMAddrMode2(u_long *mode, bool post)
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) return 1;
+            if (CheckReg(reg2)) return 1;
 
             oldLine = linePtr;
             token = GetWord(word);
@@ -394,8 +375,24 @@ bool ARMAddrMode2(u_long *mode, bool post)
         token = GetWord(word);
         if (!token)
         {
-            // FIXME - no offset register should be immediate offset zero
-            *mode = (1 << 23) | (reg1 << 16);
+            // various possible ways of representing this
+            // [Rn] => [Rn,#0]
+            //*mode = (reg1 << 16) | (1 << 24) | (1 << 23);
+            // [Rn] => [Rn],#0
+            //*mode = (1 << 23) | (reg1 << 16);
+            // [Rn] => [Rn,#-0]
+            *mode = (reg1 << 16) | (1 << 24);
+        }
+        else if (token == '!')
+        {
+            if (post)
+            {
+                BadMode();
+                return 1; // writeback modes not allowed for post-addrmode
+            }
+
+            // [Rn]! => [Rn,#0]!
+            *mode = (1 << 24) | (1 << 23) | (1 << 21) | (reg1 << 16);
         }
         else
         {
@@ -421,7 +418,7 @@ bool ARMAddrMode2(u_long *mode, bool post)
 
                 reg2 = GetReg(regs);
                 if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-                if (ARMCheckReg(reg2)) return 1;
+                if (CheckReg(reg2)) return 1;
 
                 oldLine = linePtr;
                 token = GetWord(word);
@@ -479,7 +476,7 @@ bool ARMAddrMode3(u_long *mode)
 
     reg1 = GetReg(regs);
     if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-    if (ARMCheckReg(reg1)) return 1;
+    if (CheckReg(reg1)) return 1;
 
     oldLine = linePtr;
     token = GetWord(word);
@@ -506,7 +503,7 @@ bool ARMAddrMode3(u_long *mode)
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) return 1;
+            if (CheckReg(reg2)) return 1;
 
             if (Expect("]")) return 1;
 
@@ -524,8 +521,18 @@ bool ARMAddrMode3(u_long *mode)
         token = GetWord(word);
         if (!token)
         {
-            // FIXME no second reg = immediate offset zero
-            *mode = (1 << 23) | (1 << 22) | (reg1 << 16);
+            // various possible ways of representing this
+            // [Rn] => [Rn,#0]
+            //*mode = (1 << 24) | (1 << 23) | (1 << 22) | (reg1 << 16);
+            // [Rn] => [Rn],#0
+            //*mode = (1 << 23) | (1 << 22) | (reg1 << 16);
+            // [Rn] => [Rn,#-0]
+            *mode = (1 << 24) | (1 << 22) | (reg1 << 16);
+        }
+        else if (token == '!')
+        {
+            // [Rn]! => [Rn,#0]!
+            *mode = (1 << 24) | (1 << 23) | (1 << 22) | (1 << 21) | (reg1 << 16);
         }
         else
         {
@@ -551,9 +558,102 @@ bool ARMAddrMode3(u_long *mode)
 
                 reg2 = GetReg(regs);
                 if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-                if (ARMCheckReg(reg2)) return 1;
+                if (CheckReg(reg2)) return 1;
 
                 *mode =  (sign << 23) | (reg1 << 16) | reg2;
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+// addressing mode for LDC/STC
+bool ARMAddrMode5(u_long *mode)
+{
+    int     reg1;//,reg2;
+    Str255  word;
+    char    *oldLine;
+    int     token;
+//    int     sign;
+    int     wb;
+    int     val;
+
+    *mode = 0;
+
+    if (Expect("[")) return 1;
+
+    reg1 = GetReg(regs);
+    if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
+    if (CheckReg(reg1)) return 1;
+
+    oldLine = linePtr;
+    token = GetWord(word);
+    if (token == ',')
+    {
+        if (Expect("#")) return 1;
+
+        val = Eval();
+        if (Expect("]")) return 1;
+        wb = ARMWriteback();
+
+            // FIXME: need to check range
+            if (val < 0)
+                *mode = (1 << 24) | (wb << 21) | (reg1 << 16) | (((-val) >> 2) & 0xFF);
+            else
+                *mode = (1 << 24) | (1 << 23) | (wb << 21) | (reg1 << 16) | ((val >> 2) & 0xFF);
+    }
+    else
+    {
+        linePtr = oldLine;
+        if (Expect("]")) return 1;
+
+        oldLine = linePtr;
+        token = GetWord(word);
+        if (!token)
+        {
+            // various possible ways of representing this
+            // [Rn] => [Rn],#0
+            //*mode = (1 << 23) | (1 << 21) | (reg1 << 16);
+            // [Rn] => [Rn],#-0
+            //*mode = (1 << 21) | (reg1 << 16);
+            // [Rn] => [Rn,#-0]
+            *mode = (1 << 24) | (reg1 << 16);
+        }
+        else if (token == '!')
+        {
+            // [Rn]! => [Rn,#0]!
+            *mode = (1 << 24) | (1 << 23) | (1 << 21) | (reg1 << 16);
+        }
+        else
+        {
+            linePtr = oldLine;
+
+            if (Comma()) return 1;
+
+            token = GetWord(word);
+            if (token == '#')
+            {
+                val = Eval();
+                // FIXME: need to check range
+                if (val < 0)
+                    *mode = (1 << 21) | (reg1 << 16) | ((-val >> 2) & 0xFF);
+                else
+                    *mode = (1 << 23) | (1 << 21) | (reg1 << 16) | ((val >> 2) & 0xFF);
+            }
+        else if (token == '{')
+            {
+                val = Eval();
+                if (Expect("}")) return 1;
+
+                // FIXME: need to check range
+                *mode = (1 << 23) | (reg1 << 16) | (val & 0xFF);
+            }
+            else
+            {
+                Error("\"#\" or \"{\" expected");
+                return 1;
             }
         }
     }
@@ -760,6 +860,12 @@ bool ARMOpcodeFlag(char *word, char flag)
         return 1;
     }
 
+    if (word[0] && word[1] && word[2] && (word[3]==flag) && (word[4]==0))
+    {
+        word[2] = 0;
+        return 1;
+    }
+
     return 0;
 }
 
@@ -809,7 +915,7 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             InstrL(parm | (cond << 28) | reg1);
             break;
@@ -820,7 +926,7 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
@@ -834,7 +940,7 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
@@ -849,13 +955,13 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
@@ -909,13 +1015,13 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             InstrL(parm | (cond << 28) | (reg1 << 12) | reg2);
             break;
@@ -926,19 +1032,19 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
             reg3 = GetReg(regs);
             if (reg3 > 15) reg3 = reg3 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg3)) break;
+            if (CheckReg(reg3)) break;
 
             InstrL(parm | (cond << 28) | (val << 20) | (reg1 << 16) | (reg3 << 8) | reg2);
             break;
@@ -949,20 +1055,20 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
             if (Expect("[")) break;
 
             reg3 = GetReg(regs);
             if (reg3 > 15) reg3 = reg3 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg3)) break;
+            if (CheckReg(reg3)) break;
 
             if (Expect("]")) break;
 
@@ -980,7 +1086,7 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             oldLine = linePtr;
             token = GetWord(word);
@@ -1017,7 +1123,7 @@ int ARM_DoCPUOpcode(int typ, int parm)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
@@ -1026,11 +1132,6 @@ int ARM_DoCPUOpcode(int typ, int parm)
             else
                 val = ARMAddrMode2(&mode,reg2 == LDR_BT || reg2 == LDR_T);
             if (val) break;
-
-if (pass == 3)
-{
-    printf("*** %s *** reg2=%d, mode=%.8lX\n",line,reg2,mode);
-}
 
             switch(reg2)
             {
@@ -1070,12 +1171,12 @@ if (pass == 3)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg("CPSR SPSR");
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             InstrL(parm | (cond << 28) | (reg2 << 22) | (reg1 << 12));
             break;
@@ -1107,7 +1208,7 @@ if (pass == 3)
             {
                 reg2 = FindReg(word,regs);
                 if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-                if (ARMCheckReg(reg2)) break;
+                if (CheckReg(reg2)) break;
 
                 InstrL(parm | (cond << 28) | reg1 | reg2);
             }
@@ -1120,25 +1221,25 @@ if (pass == 3)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
             reg3 = GetReg(regs);
             if (reg3 > 15) reg3 = reg3 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg4 = GetReg(regs);
             if (reg4 > 15) reg4 = reg4 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             InstrL(parm | (cond << 28) | (val << 20) | (reg1 << 16) | (reg4 << 12) | (reg3 << 8) | reg2);
             break;
@@ -1149,25 +1250,25 @@ if (pass == 3)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
             reg3 = GetReg(regs);
             if (reg3 > 15) reg3 = reg3 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg4 = GetReg(regs);
             if (reg4 > 15) reg4 = reg4 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             InstrL(parm | (cond << 28) | (val << 20) | (reg2 << 16) | (reg1 << 12) | (reg4 << 8) | reg3);
             break;
@@ -1178,8 +1279,8 @@ if (pass == 3)
             else
                 if (ARMCond(&cond,word)) return 0;
 
-            val = GetReg(cops);
-            if (ARMCheckReg(val)) break;
+            val = GetReg(pregs);
+            if (CheckReg(val)) break;
             mode = val << 8;
 
             if (Comma()) break;
@@ -1193,19 +1294,19 @@ if (pass == 3)
 
             reg1 = GetReg(cregs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(cregs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
             reg3 = GetReg(cregs);
             if (reg3 > 15) reg3 = reg3 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
@@ -1223,8 +1324,8 @@ if (pass == 3)
             else
                 if (ARMCond(&cond,word)) return 0;
 
-            val = GetReg(cops);
-            if (ARMCheckReg(val)) break;
+            val = GetReg(pregs);
+            if (CheckReg(val)) break;
             mode = val << 8;
 
             if (Comma()) break;
@@ -1238,19 +1339,19 @@ if (pass == 3)
 
             reg1 = GetReg(regs);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(cregs);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
             reg3 = GetReg(cregs);
             if (reg3 > 15) reg3 = reg3 - 3; // SP LR PC -> R13 R14 R15
-            if (ARMCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             oldLine = linePtr;
             token = GetWord(word);
@@ -1270,10 +1371,108 @@ if (pass == 3)
             InstrL(parm | (cond << 28) | mode | (reg2 << 16) | (reg1 << 12) | reg3);
             break;
 
-//        case o_LDC_STC:      // LDC/STC
+        case o_LDC_STC:      // LDC/STC
+            if (word[0] == '2')
+            {
+                val = 0;
+                cond = 15;
+                if (word[1] == 'L')
+                {
+                    val = 1;
+                    if (word[2]) return 0;
+                }
+                else if (word[1]) return 0;
+            }
+            else
+            {
+                val = ARMOpcodeFlag(word,'L');
+                if (ARMCond(&cond,word)) return 0;
+            }
+
+            reg1 = GetReg(pregs);
+            if (CheckReg(reg1)) break;
+
+            if (Comma()) break;
+
+            reg2 = GetReg(cregs);
+            if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
+            if (CheckReg(reg2)) break;
+
+            if (Comma()) break;
+
+            if (ARMAddrMode5(&mode)) break;
+
+            InstrL(parm | (cond << 28) | (val << 22) | (reg2 << 12) | (reg1 << 8) | mode);
+
             break;
 
-//        case o_ADR:          // ADR/ADRL
+        case o_ADR:          // ADR/ADRL
+// ADRL Rn,address
+            if (word[0] == 'L')
+            {
+                parm = 1;
+                if (ARMCond(&cond,word+1)) return 0;
+            }
+            else
+            {
+                if (ARMCond(&cond,word)) return 0;
+            }
+
+            reg1 = GetReg(regs);
+            if (CheckReg(reg1)) break;
+
+            if (Comma()) break;
+
+            val = EvalLBranch(8);
+
+            i = parm + 1; // number of longwords
+
+            if (evalKnown && parm)
+            {
+                // *** determine auto size for ADRL
+                if (-0xFF <= val && val <= 0xFF)
+                    i = 1;
+            }
+
+            switch(i)
+            {
+                case 4:
+                    break;
+
+                case 3:
+                    break;
+
+                case 2:
+                    if (val < 0)
+                        InstrLL(0x028F0000 | (cond << 28) | (reg1 << 12) | (-val & 0xFF),
+                                0x02800400 | (cond << 28) | (reg1 << 16) | (reg1 << 12) | ((-val >> 8) & 0xFF));
+                    else
+                        InstrLL(0x024F0000 | (cond << 28) | (reg1 << 12) | (val & 0xFF),
+                                0x02400000 | (cond << 28) | (reg1 << 16) | (reg1 << 12) | ((val >> 8) & 0xFF));
+                    break;
+
+                default:
+                    if (val < 0)
+                        InstrL(0x028F0000 | (cond << 28) | (reg1 << 12) | (-val & 0xFF));
+                    else
+                        InstrL(0x024F0000 | (cond << 28) | (reg1 << 12) | (val & 0xFF));
+                    break;
+            }
+
+// gets complicated because of offsets
+
+//   ADR     R1,.            ; E24F1008
+//   ADRL    R1,.            ; E24F1008
+//   ADRL    R1,.+$1000      ; E28F1FFE E2811B03
+//   ADRL    R1,.+$100000    ; E28F1FFE E2811BFF E2811703
+//   ADRL    R1,.+$10000000  ; E28F1FFE E2811BFF E28117FF E2811303
+
+if (pass == 2)
+{
+    printf("*** %.8X *** %s\n",val,line);
+}
+
+//            InstrL(   (cond << 28) | (val & 0x0FFF));
             break;
 
         case o_Implied:      // NOP
@@ -1305,7 +1504,7 @@ void AsmARMInit(void)
     char *p;
 
     p = AddAsm(versionName, &ARM_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "ARM",    0, LITTLE_END, ADDR_24, LIST_24, 8, ARM_opcdTab);
-    AddCPU(p, "ARM_BE", 0, BIG_END,    ADDR_24, LIST_24, 8, ARM_opcdTab);
-    AddCPU(p, "ARM_LE", 0, LITTLE_END, ADDR_24, LIST_24, 8, ARM_opcdTab);
+    AddCPU(p, "ARM",    0, LITTLE_END, ADDR_24, LIST_24, 8, 0, ARM_opcdTab);
+    AddCPU(p, "ARM_BE", 0, BIG_END,    ADDR_24, LIST_24, 8, 0, ARM_opcdTab);
+    AddCPU(p, "ARM_LE", 0, LITTLE_END, ADDR_24, LIST_24, 8, 0, ARM_opcdTab);
 }

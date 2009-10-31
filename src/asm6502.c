@@ -118,7 +118,7 @@ enum addrOps
 };
 
 
-const unsigned char mode2op6502[] = // [o_Max * a_Max] =
+const u_char mode2op6502[] = // [o_Max * a_Max] =
 {//Imm=0 Abs=1 Zpg=2 Acc=3 Inx=4 Iny=5 Zpx=6 Abx=7 Aby=8 Ind=9 Zpy=10 Zpi=11
     0x09, 0x0D, 0x05,    0, 0x01, 0x11, 0x15, 0x1D, 0x19,    0,    0,    0, 0,0,0,0,0,0, //  0 ORA
        0, 0x0E, 0x06, 0x0A,    0,    0, 0x16, 0x1E,    0,    0,    0,    0, 0,0,0,0,0,0, //  1 ASL
@@ -160,7 +160,7 @@ const unsigned char mode2op6502[] = // [o_Max * a_Max] =
 };
 
 
-const unsigned char mode2op65C02[] = // [o_Max * a_Max] =
+const u_char mode2op65C02[] = // [o_Max * a_Max] =
 {//Imm=0 Abs=1 Zpg=2 Acc=3 Inx=4 Iny=5 Zpx=6 Abx=7 Aby=8 Ind=9 Zpy=10 Zpi=11
     0x09, 0x0D, 0x05,    0, 0x01, 0x11, 0x15, 0x1D, 0x19,    0,    0, 0x12, 0,0,0,0,0,0, //  0 ORA
        0, 0x0E, 0x06, 0x0A,    0,    0, 0x16, 0x1E,    0,    0,    0,    0, 0,0,0,0,0,0, //  1 ASL
@@ -192,7 +192,7 @@ const unsigned char mode2op65C02[] = // [o_Max * a_Max] =
 };
 
 
-const unsigned char mode2op65C816[] = // [o_Max * a_Max] =
+const u_char mode2op65C816[] = // [o_Max * a_Max] =
 {//Imm=0 Abs=1 Zpg=2 Acc=3 Inx=4 Iny=5 Zpx=6 Abx=7 Aby=8 Ind=9 Zpy10 Zpi11 AbL12 ALX13 DIL14 DIY15 Stk16 SIY17
     0x09, 0x0D, 0x05,    0, 0x01, 0x11, 0x15, 0x1D, 0x19,    0,    0, 0x12, 0x0F, 0x1F, 0x07, 0x17, 0x03, 0x13, //  0 ORA
        0, 0x0E, 0x06, 0x0A,    0,    0, 0x16, 0x1E,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0, //  1 ASL
@@ -428,7 +428,7 @@ int M6502_DoCPUOpcode(int typ, int parm)
     bool    forceabs;
     int     opcode;
     int     mode;
-    const unsigned char *modes;     // pointer to current o_Mode instruction's opcodes
+    const u_char *modes;     // pointer to current o_Mode instruction's opcodes
 
     switch(typ)
     {
@@ -469,7 +469,7 @@ int M6502_DoCPUOpcode(int typ, int parm)
             mode = a_None;
             val  = 0;
 
-            if (token == 0)
+            if (!token)
                mode = a_Acc;    // accumulator
             else
             {
@@ -487,7 +487,7 @@ int M6502_DoCPUOpcode(int typ, int parm)
                         {
                             case ',':   // (val,X)
                                 token = GetWord(word);
-                                if (word[1] == 0) token = word[0];
+                                if (!word[1]) token = word[0];
                                 switch(token)
                                 {
                                     case 'X':
@@ -549,7 +549,7 @@ int M6502_DoCPUOpcode(int typ, int parm)
 
                                 case ',':
                                     GetWord(word);
-                                    if ((toupper(word[0]) == 'Y') && (word[1] == 0))
+                                    if ((toupper(word[0]) == 'Y') && (!word[1]))
                                         mode = a_DIY;
                                     else mode = a_None;
                             }
@@ -558,7 +558,7 @@ int M6502_DoCPUOpcode(int typ, int parm)
                         // else fall through letting eval() treat the '[' as an open paren
 
                     default:    // everything else
-                        if ((word[1] == 0) && (toupper(word[0]) == 'A'))
+                        if ((!word[1]) && (toupper(word[0]) == 'A'))
                         {       // accumulator
                             token = GetWord(word);
                             if (token == 0)     // mustn't have anything after the 'A'
@@ -744,9 +744,9 @@ void Asm6502Init(void)
     char *p;
 
     p = AddAsm(versionName, &M6502_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "6502",   CPU_6502,   LITTLE_END, ADDR_16, LIST_24, 8, M6502_opcdTab);
-    AddCPU(p, "65C02",  CPU_65C02,  LITTLE_END, ADDR_16, LIST_24, 8, M6502_opcdTab);
-    AddCPU(p, "6502U",  CPU_6502U,  LITTLE_END, ADDR_16, LIST_24, 8, M6502_opcdTab);
-    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, 8, M6502_opcdTab);
-    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, 8, M6502_opcdTab);
+    AddCPU(p, "6502",   CPU_6502,   LITTLE_END, ADDR_16, LIST_24, 8, 0, M6502_opcdTab);
+    AddCPU(p, "65C02",  CPU_65C02,  LITTLE_END, ADDR_16, LIST_24, 8, 0, M6502_opcdTab);
+    AddCPU(p, "6502U",  CPU_6502U,  LITTLE_END, ADDR_16, LIST_24, 8, 0, M6502_opcdTab);
+    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, 8, 0, M6502_opcdTab);
+    AddCPU(p, "65C816", CPU_65C816, LITTLE_END, ADDR_24, LIST_24, 8, 0, M6502_opcdTab);
 }

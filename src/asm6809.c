@@ -3,6 +3,12 @@
 #define versionName "6809 assembler"
 #include "asmx.h"
 
+enum cputype
+{
+    CPU_6809,        // 6809 instructions only
+    CPU_6309         // 6309 instructions enabled
+};
+
 enum
 {
     o_Inherent,     // implied instructions
@@ -15,6 +21,11 @@ enum
     o_Logical,      // logical instructions with multiple addressing modes
     o_Arith,        // arithmetic instructions with multiple addressing modes
     o_LArith,       // o_Arith instructions with 16-bit immediate modes
+    o_QArith,       // 6309 o_Arith with 4-byte immediate
+    o_TFM,          // 6309 TFM instruction
+    o_Bit,          // 6309 bit manipulation instructions
+
+    o_6309 = 0x8000, // add to parm value for 6309 opcodes
 
     o_SETDP = o_LabelOp // SETDP pseudo-op
 };
@@ -216,13 +227,111 @@ struct OpcdRec M6809_opcdTab[] =
     {"LDAD", o_LArith,   0xCC},     // alternate mnemonic for LDD
     {"STAD", o_Arith,    0xDD},     // alternate mnemonic for STD
 
+// 6309 opcodes
+
+    {"ASLD",  o_Inherent, 0x1048 | o_6309},
+    {"ASRD",  o_Inherent, 0x1047 | o_6309},
+    {"CLRD",  o_Inherent, 0x104F | o_6309},
+    {"CLRE",  o_Inherent, 0x114F | o_6309},
+    {"CLRF",  o_Inherent, 0x115F | o_6309},
+    {"CLRW",  o_Inherent, 0x105F | o_6309},
+    {"COMD",  o_Inherent, 0x1043 | o_6309},
+    {"COME",  o_Inherent, 0x1143 | o_6309},
+    {"COMF",  o_Inherent, 0x1153 | o_6309},
+    {"COMW",  o_Inherent, 0x1053 | o_6309},
+    {"DECD",  o_Inherent, 0x104A | o_6309},
+    {"DECE",  o_Inherent, 0x114A | o_6309},
+    {"DECF",  o_Inherent, 0x115A | o_6309},
+    {"DECW",  o_Inherent, 0x105A | o_6309},
+    {"INCD",  o_Inherent, 0x104C | o_6309},
+    {"INCE",  o_Inherent, 0x114C | o_6309},
+    {"INCF",  o_Inherent, 0x115C | o_6309},
+    {"INCW",  o_Inherent, 0x105C | o_6309},
+    {"LSLD",  o_Inherent, 0x1048 | o_6309},
+    {"LSRD",  o_Inherent, 0x1044 | o_6309},
+    {"LSRW",  o_Inherent, 0x1054 | o_6309},
+    {"NEGD",  o_Inherent, 0x1040 | o_6309},
+    {"PSHSW", o_Inherent, 0x1038 | o_6309},
+    {"PSHUW", o_Inherent, 0x103A | o_6309},
+    {"PULSW", o_Inherent, 0x1039 | o_6309},
+    {"PULUW", o_Inherent, 0x103B | o_6309},
+    {"ROLD",  o_Inherent, 0x1049 | o_6309},
+    {"ROLW",  o_Inherent, 0x1059 | o_6309},
+    {"RORD",  o_Inherent, 0x1046 | o_6309},
+    {"RORW",  o_Inherent, 0x1056 | o_6309},
+    {"SEXW",  o_Inherent, 0x14   | o_6309},
+    {"TSTD",  o_Inherent, 0x104D | o_6309},
+    {"TSTE",  o_Inherent, 0x114D | o_6309},
+    {"TSTF",  o_Inherent, 0x115D | o_6309},
+    {"TSTW",  o_Inherent, 0x105D | o_6309},
+
+    {"BITMD", o_Immediate, 0x113C | o_6309},
+    {"LDMD",  o_Immediate, 0x113D | o_6309},
+
+    {"AIM",  o_Logical, 0x02 | o_6309},
+    {"EIM",  o_Logical, 0x05 | o_6309},
+    {"OIM",  o_Logical, 0x01 | o_6309},
+    {"TIM",  o_Logical, 0x0B | o_6309},
+
+    {"ADDE",  o_Arith, 0x118B | o_6309},
+    {"ADDF",  o_Arith, 0x11CB | o_6309},
+    {"CMPE",  o_Arith, 0x1181 | o_6309},
+    {"CMPF",  o_Arith, 0x11C1 | o_6309},
+    {"DIVD",  o_Arith, 0x118D | o_6309},
+    {"LDE" ,  o_Arith, 0x1186 | o_6309},
+    {"LDF" ,  o_Arith, 0x11C6 | o_6309},
+    {"STE" ,  o_Arith, 0x1197 | o_6309},
+    {"STF" ,  o_Arith, 0x11D7 | o_6309},
+    {"STQ" ,  o_Arith, 0x10DD | o_6309},
+    {"STS" ,  o_Arith, 0x10DF | o_6309},
+    {"SUBE",  o_Arith, 0x1180 | o_6309},
+    {"SUBF",  o_Arith, 0x11C0 | o_6309},
+
+    {"ADCD",  o_LArith, 0x1089 | o_6309},
+    {"ADDW",  o_LArith, 0x108B | o_6309},
+    {"ANDD",  o_LArith, 0x1084 | o_6309},
+    {"BITD",  o_LArith, 0x1085 | o_6309},
+    {"CMPW",  o_LArith, 0x1081 | o_6309},
+    {"DIVQ",  o_LArith, 0x118E | o_6309},
+    {"EORD",  o_LArith, 0x1088 | o_6309},
+    {"LDW" ,  o_LArith, 0x1086 | o_6309},
+    {"MULD",  o_LArith, 0x118F | o_6309},
+    {"ORD" ,  o_LArith, 0x108A | o_6309},
+    {"SBCD",  o_LArith, 0x1082 | o_6309},
+    {"STW" ,  o_LArith, 0x1097 | o_6309},
+    {"SUBW",  o_LArith, 0x1080 | o_6309},
+
+    {"LDQ" ,  o_QArith, 0x10CC | o_6309}, // special: immed is 0xCD
+
+    {"ADCR",  o_ExgTfr, 0x1031 | o_6309},
+    {"ADDR",  o_ExgTfr, 0x1030 | o_6309},
+    {"ANDR",  o_ExgTfr, 0x1034 | o_6309},
+    {"CMPR",  o_ExgTfr, 0x1037 | o_6309},
+    {"EORR",  o_ExgTfr, 0x1036 | o_6309},
+    {"ORR" ,  o_ExgTfr, 0x1035 | o_6309},
+    {"SBCR",  o_ExgTfr, 0x1033 | o_6309},
+    {"SUBR",  o_ExgTfr, 0x1032 | o_6309},
+
+    {"TFM" ,  o_TFM, 0x1138 | o_6309},
+
+    {"BAND",  o_Bit, 0x1130 | o_6309},
+    {"BIAND", o_Bit, 0x1131 | o_6309},
+    {"BOR" ,  o_Bit, 0x1132 | o_6309},
+    {"BIOR",  o_Bit, 0x1133 | o_6309},
+    {"BEOR",  o_Bit, 0x1134 | o_6309},
+    {"BIEOR", o_Bit, 0x1135 | o_6309},
+    {"LDBT",  o_Bit, 0x1136 | o_6309},
+    {"STBT",  o_Bit, 0x1137 | o_6309},
+
     {"",     o_Illegal, 0}
 };
 
 
 const char tfrRegs[] = "D X Y U S PC X X A B CC DP"; // extra X's are placeholders
+const char tfrRegs6309[] = "D X Y U S PC W V A B CC DP 0 00 E F";
 const char pshRegs[] = "CC A B DP X Y U PC D S";
 const char idxRegs[] = "X Y U S";
+const char idxRegsW[] = "X Y U S W";
 
 u_char dpReg;
 
@@ -230,7 +339,7 @@ u_char dpReg;
 // --------------------------------------------------------------
 
 
-void DoIndex(int idxOp, int dirOp, int extOp)
+static void M6809_Indexed(int idxOp, int dirOp, int extOp)
 {
 //  idxOp is required
 //  if dirOp == 0, use extOp
@@ -262,6 +371,13 @@ void DoIndex(int idxOp, int dirOp, int extOp)
         token = word[0];
     }
 
+    // handle E, F, W as tokens
+    if (curCPU == CPU_6309 &&
+        token == -1 && word[1] == 0 && (word[0] == 'E' || word[0] == 'F' || word[0] == 'W'))
+    {
+        token = word[0];
+    }
+
     switch(token)
     {
         case ',':
@@ -272,8 +388,13 @@ void DoIndex(int idxOp, int dirOp, int extOp)
                 {
                     linePtr++;
                     GetWord(word);
-                    reg = FindReg(word, idxRegs);
-                    if (reg < 0)
+                    reg = FindReg(word, idxRegsW);
+                    if (curCPU == CPU_6309 && reg == 4)
+                    {
+                        // ,--W
+                        InstrXB(idxOp, 0xEF + !!indirect);  // ,--X
+                    }
+                    else if (reg < 0 || reg > 3)
                         BadMode();
                     else
                         InstrXB(idxOp, reg * 0x20 + 0x83 + indirect);  // ,--X
@@ -290,8 +411,32 @@ void DoIndex(int idxOp, int dirOp, int extOp)
             }
             else
             {
-                reg = FindReg(word, idxRegs);
-                if (reg < 0)
+                reg = FindReg(word, idxRegsW);
+                if (curCPU == CPU_6309 && reg == 4)
+                {
+                    // ,W / ,W++
+                    oldLine = linePtr;
+                    token = GetWord(word);
+                    switch(token)
+                    {
+                        case ']':
+                            linePtr = oldLine;
+                        case 0: // ,W
+                            InstrXB(idxOp, 0x8F + !!indirect);  // ,X
+                            break;
+                        case '+': // ,W++
+                            if (*linePtr == '+')
+                            {
+                                linePtr++;
+                                InstrXB(idxOp, 0xCF + !!indirect);  // ,W++
+                                break;
+                            }
+                        default:
+                            BadMode();
+                            break;
+                    }
+                }
+                else if (reg < 0 || reg > 3)
                     BadMode();
                 else
                 {
@@ -324,6 +469,9 @@ void DoIndex(int idxOp, int dirOp, int extOp)
         case 'A':
         case 'B':
         case 'D':
+        case 'E':
+        case 'F':
+        case 'W':
             Comma();
             GetWord(word);
             reg = FindReg(word, idxRegs);
@@ -336,6 +484,9 @@ void DoIndex(int idxOp, int dirOp, int extOp)
                     case 'A':   InstrXB(idxOp, reg * 0x20 + 0x86 + indirect); break;        // A,X
                     case 'B':   InstrXB(idxOp, reg * 0x20 + 0x85 + indirect); break;        // B,X
                     case 'D':   InstrXB(idxOp, reg * 0x20 + 0x8B + indirect); break;        // D,X
+                    case 'E':   InstrXB(idxOp, reg * 0x20 + 0x87 + indirect); break;        // A,X
+                    case 'F':   InstrXB(idxOp, reg * 0x20 + 0x8A + indirect); break;        // B,X
+                    case 'W':   InstrXB(idxOp, reg * 0x20 + 0x8E + indirect); break;        // D,X
                     default:    BadMode();
                 }
             }
@@ -371,8 +522,16 @@ void DoIndex(int idxOp, int dirOp, int extOp)
                     break;
                 case ',':   // value,
                     GetWord(word);
-                    reg = FindReg(word, idxRegs);
-                    if (reg < 0)
+                    reg = FindReg(word, idxRegsW);
+                    if (curCPU == CPU_6309 && reg == 4)
+                    {
+                        // nnnn,W
+                        if (force == '<')
+                            BadMode();
+                        else
+                            InstrXBW(idxOp, 0xAF + !!indirect, val); // nnnn,W
+                    }
+                    else if (reg < 0 || reg > 3)
                     {
                         if (strcmp(word,"PC") == 0 || strcmp(word,"PCR") == 0)
                         {
@@ -412,7 +571,12 @@ int M6809_DoCPUOpcode(int typ, int parm)
     int     reg1,reg2;
     Str255  word;
     char    *oldLine;
+    const char *regs;
     int     token;
+
+    // verify that 6309 instructions are allowed
+    if ((parm & o_6309) && curCPU != CPU_6309) return 0;
+    parm &= ~o_6309;
 
     switch(typ)
     {
@@ -449,7 +613,7 @@ int M6809_DoCPUOpcode(int typ, int parm)
             break;
 
         case o_Indexed:
-            DoIndex(parm, -1, -1);
+            M6809_Indexed(parm, -1, -1);
             break;
 
         case o_PshPul:
@@ -492,51 +656,206 @@ int M6809_DoCPUOpcode(int typ, int parm)
             break;
 
         case o_ExgTfr:
+            regs = tfrRegs;
+            if (curCPU == CPU_6309)
+                regs = tfrRegs6309;
+
+            // get first register
             GetWord(word);
-            reg1 = FindReg(word,tfrRegs);
+            reg1 = FindReg(word,regs);
             if (reg1 < 0)
-                Error("Invalid register");
-            else
             {
-                Comma();
-                GetWord(word);
-                reg2 = FindReg(word,tfrRegs);
-                if (reg2 < 0)
-                    Error("Invalid register");
-                else
-                {
-                    if ((reg1 & 8) != (reg2 & 8))
-                        Error("Register size mismatch");
-                    else
-                        InstrXB(parm, reg1 * 16 + reg2);
-                }
+                Error("Invalid register");
+                break;
             }
+
+            if (Comma()) break;
+
+            // get second register
+            GetWord(word);
+            reg2 = FindReg(word,regs);
+            if (reg2 < 0)
+            {
+                Error("Invalid register");
+                break;
+            }
+
+            if (curCPU != CPU_6309 && (reg1 & 8) != (reg2 & 8))
+            {
+                Error("Register size mismatch");
+                break;
+            }
+
+            InstrXB(parm, reg1 * 16 + reg2);
             break;
 
         case o_Logical:
-            DoIndex(parm | 0x60, parm, parm | 0x70);
+            M6809_Indexed(parm | 0x60, parm, parm | 0x70);
             break;
 
         case o_Arith:
         case o_LArith:
+        case o_QArith:
             oldLine = linePtr;
             token = GetWord(word);
             if (token == '#')
             {
                 if (parm & 0x10)    // immediate
-                    Error("Invalid addressing mode");
-                else
                 {
-                    val = Eval();
-                    if (typ == o_Arith) InstrXB (parm & ~0x10, val);
-                                else    InstrXW(parm & ~0x10, val);
+                    Error("Invalid addressing mode");
+                    break;
+                }
+
+                val = Eval();
+                switch(typ)
+                {
+                    default:
+                    case o_Arith:   InstrXB(parm & ~0x10, val);    break;
+                    case o_LArith:  InstrXW(parm & ~0x10, val);    break;
+                    case o_QArith:  InstrX(0xCD); InstrAddL(val);  break;
                 }
             }
             else
             {
                 linePtr = oldLine;
-                DoIndex((parm & ~0x10) | 0x20, (parm & ~0x10) | 0x10, (parm & ~0x10) | 0x30);
+                M6809_Indexed((parm & ~0x10) | 0x20, (parm & ~0x10) | 0x10, (parm & ~0x10) | 0x30);
             }
+            break;
+
+        case o_TFM: // works like o_ExgTfr except for allowing + and - after registers
+            regs = tfrRegs;
+            if (curCPU == CPU_6309)
+                regs = tfrRegs6309;
+
+            // get first register
+            GetWord(word);
+            reg1 = FindReg(word,regs);
+            if (reg1 < 0)
+            {
+                Error("Invalid register");
+                break;
+            }
+
+            val = -1;
+
+            token = GetWord(word);
+            switch(token)
+            {
+                case '+': // R+,R+ and R+,R
+                    val = 0;
+                    if (Comma()) return 1;
+                    break;
+
+                case '-': // R-,R- only
+                    val = 1;
+                    if (Comma()) return 1;
+                    break;
+
+                case ',': // R,R+ only
+                    val = 3;
+                    break;
+
+                default:
+                    IllegalOperand();
+                    return 1;
+            }
+
+
+            // get second register
+            GetWord(word);
+            reg2 = FindReg(word,regs);
+            if (reg2 < 0)
+            {
+                Error("Invalid register");
+                break;
+            }
+
+            token = GetWord(word);
+            switch(token)
+            {
+                case '+': // R,R+ and R+,R+
+                    switch(val)
+                    {
+                        case 0: // R+,R+
+                        case 3: // R,R+
+                            break;
+
+                        default:
+                            IllegalOperand();
+                            return 1;
+                    }
+                    break;
+
+                case '-': // R-,R- only
+                    if (val != 1)
+                    {
+                        IllegalOperand();
+                        return 1;
+                    }
+                    break;
+
+                case 0: // R+,R only
+                    if (val != 0)
+                    {
+                        IllegalOperand();
+                        return 1;
+                    }
+                    val = 2;
+                    break;
+                
+                default:
+                    IllegalOperand();
+                    return 1;
+            }
+
+            InstrXB(parm + val, reg1 * 16 + reg2);
+            break;
+
+        case o_Bit:
+            // first register = CC, A, B
+            token = GetWord(word);
+            val = FindReg(word,pshRegs);
+            if (val < 0 || val > 2)
+            {
+                Error("Invalid register");
+                break;
+            }
+            reg1 = val << 6;
+
+            if (Comma()) break;
+
+            // source bit = 0..7
+            val = Eval();
+            if (val < 0 || val > 7)
+            {
+                IllegalOperand();
+                break;
+            }
+            reg1 |= val << 3;
+
+            if (Comma()) break;
+
+            // destination bit = 0..7
+            val = Eval();
+            if (val < 0 || val > 7)
+            {
+                IllegalOperand();
+                break;
+            }
+            reg1 |= val;
+
+            if (Comma()) break;
+
+            // allow '<' force character for direct addressing mode
+            oldLine = linePtr;
+            token = GetWord(word);
+            if (token != '<')
+                linePtr = oldLine;
+
+            // direct page address
+            val = Eval() & 0xFF;
+
+            InstrXBB(parm, reg1, val);
             break;
 
         default:
@@ -599,5 +918,6 @@ void Asm6809Init(void)
     char *p;
 
     p = AddAsm(versionName, &M6809_DoCPUOpcode, &M6809_DoCPULabelOp, &M6809_PassInit);
-    AddCPU(p, "6809",  0, BIG_END, ADDR_16, LIST_24, 8, M6809_opcdTab);
+    AddCPU(p, "6809", CPU_6809, BIG_END, ADDR_16, LIST_24, 8, 0, M6809_opcdTab);
+    AddCPU(p, "6309", CPU_6309, BIG_END, ADDR_16, LIST_24, 8, 0, M6809_opcdTab);
 }

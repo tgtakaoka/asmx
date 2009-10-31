@@ -733,5 +733,5 @@ void Asm68HC16Init(void)
     char *p;
 
     p = AddAsm(versionName, &M68HC16_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "68HC16", 0, BIG_END, ADDR_16, LIST_24, 8, M68HC16_opcdTab);
+    AddCPU(p, "68HC16", 0, BIG_END, ADDR_16, LIST_24, 8, 0, M68HC16_opcdTab);
 }

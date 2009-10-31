@@ -206,37 +206,18 @@ int ThumbGetMultiRegs(bool useLR, u_short *regbits)
 }
 
 
-
-// note: this is a candidate for moving to asmx.c
-int ThumbCheckReg(int reg) // may want to add a maxreg parameter
-{
-    if (reg == reg_EOL)
-    {
-        MissingOperand();      // abort if not valid register
-        return 1;
-    }
-//  if ((reg < 0) || (reg > maxReg))
-    if (reg < 0)
-    {
-        IllegalOperand();      // abort if not valid register
-        return 1;
-    }
-    return 0;
-}
-
-
 // get two registers R0-R7, returns -1 if error
 u_long TwoRegs()
 {
     int     reg1,reg2;
 
     reg1 = GetReg(regs_0_7);
-    if (ThumbCheckReg(reg1)) return -1;
+    if (CheckReg(reg1)) return -1;
     
     if (Comma()) return -1;
 
     reg2 = GetReg(regs_0_7);
-    if (ThumbCheckReg(reg2)) return -1;
+    if (CheckReg(reg2)) return -1;
 
     return (reg2 << 3) | reg1;
 }
@@ -277,7 +258,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
         case o_ADD:          // ADD opcode
             reg1 = GetReg(regs_0_15);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
@@ -303,7 +284,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
 
                 reg2 = GetReg(regs_0_15);
                 if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-                if (ThumbCheckReg(reg2)) break;
+                if (CheckReg(reg2)) break;
 
                 oldLine = linePtr;
                 token = GetWord(word);
@@ -333,7 +314,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
                     else
                     {
                         val = FindReg(word,regs_0_7);
-                        if (ThumbCheckReg(val)) break;
+                        if (CheckReg(val)) break;
 
                         InstrW(0x1800 | (val << 6) | (reg2 << 3) | reg1);
                     }
@@ -346,7 +327,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
         case o_SUB:          // SUB opcode
             reg1 = GetReg(regs_0_15);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (reg1 > 7 && reg1 != 13)    // only R0-R7 and SP are allowed here
             {
@@ -376,7 +357,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
             { // Rd,Rn,#immed3 / Rd,Rn,Rm
                 linePtr = oldLine;
                 reg2 = GetReg(regs_0_7);
-                if (ThumbCheckReg(reg2)) break;
+                if (CheckReg(reg2)) break;
 
                 if (Comma()) break;
 
@@ -390,7 +371,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
                 else
                 {
                     val = FindReg(word,regs_0_7);
-                    if (ThumbCheckReg(val)) break;
+                    if (CheckReg(val)) break;
 
                     InstrW(0x1A00 | (val << 6) | (reg2 << 3) | reg1);
                 }
@@ -399,12 +380,12 @@ int Thumb_DoCPUOpcode(int typ, int parm)
 
         case o_Shift:        // ASR/LSL/LSR
             reg1 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
             reg2 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             oldLine = linePtr;
             token = GetWord(word);
@@ -461,7 +442,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
         case o_BX:           // BX
             reg1 = GetReg(regs_0_15);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             InstrW(parm | reg1 << 3);
             break;
@@ -469,7 +450,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
         case o_CMP_MOV:      // CMP/MOV
             reg1 = GetReg(regs_0_15);
             if (reg1 > 15) reg1 = reg1 - 3; // SP LR PC -> R13 R14 R15
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
 
@@ -492,7 +473,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
 
                 reg2 = GetReg(regs_0_15);
                 if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-                if (ThumbCheckReg(reg2)) break;
+                if (CheckReg(reg2)) break;
 
                 if ((reg1 < 8) && (reg2 < 8))
                 {
@@ -509,7 +490,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
         case o_LDMIA:        // LDMIA/STMIA
             // FIXME: at least one reg must be specified
             reg1 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Expect("!")) break;
             if (Comma()) break;
@@ -523,14 +504,14 @@ int Thumb_DoCPUOpcode(int typ, int parm)
 //    {"LDR",   o_LDR,        0x0800},
 //    {"STR",   o_LDR,        0x0000},
             reg1 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
             if (Expect("[")) break;
 
             reg2 = GetReg(regs_0_15);
             if (reg2 > 15) reg2 = reg2 - 3; // SP LR PC -> R13 R14 R15
-            if (ThumbCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if ((reg2 > 7) && (reg2 != 13) && (reg2 != 15))
             {
@@ -570,7 +551,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
                 else
                 { // Rm
                     val = FindReg(word,regs_0_7);
-                    if (ThumbCheckReg(val)) break;
+                    if (CheckReg(val)) break;
 
                     InstrW(0x5000 | parm | (val << 6) | (reg2 << 3) | reg1);
                 }
@@ -580,13 +561,13 @@ int Thumb_DoCPUOpcode(int typ, int parm)
 
         case o_LDRBH:        // LDRB/LDRH/STRB/STRH
             reg1 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
             if (Expect("[")) break;
 
             reg2 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg2)) break;
+            if (CheckReg(reg2)) break;
 
             if (Comma()) break;
 
@@ -608,7 +589,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
             else
             {
                 val = FindReg(word,regs_0_7);
-                if (ThumbCheckReg(val)) break;
+                if (CheckReg(val)) break;
 
                 InstrW((parm & 0xFFFF) | ((val & 0x1F) << 6) | (reg2 << 3) | reg1);
             }
@@ -617,7 +598,7 @@ int Thumb_DoCPUOpcode(int typ, int parm)
 
         case o_LDRSBH:       // LDRSB/LDRSH
             reg1 = GetReg(regs_0_7);
-            if (ThumbCheckReg(reg1)) break;
+            if (CheckReg(reg1)) break;
 
             if (Comma()) break;
             if (Expect("[")) break;
@@ -666,7 +647,7 @@ void AsmThumbInit(void)
     char *p;
 
     p = AddAsm(versionName, &Thumb_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "THUMB"   , 0, LITTLE_END, ADDR_24, LIST_24, 8, Thumb_opcdTab);
-    AddCPU(p, "THUMB_BE", 0, BIG_END,    ADDR_24, LIST_24, 8, Thumb_opcdTab);
-    AddCPU(p, "THUMB_LE", 0, LITTLE_END, ADDR_24, LIST_24, 8, Thumb_opcdTab);
+    AddCPU(p, "THUMB"   , 0, LITTLE_END, ADDR_24, LIST_24, 8, 0, Thumb_opcdTab);
+    AddCPU(p, "THUMB_BE", 0, BIG_END,    ADDR_24, LIST_24, 8, 0, Thumb_opcdTab);
+    AddCPU(p, "THUMB_LE", 0, LITTLE_END, ADDR_24, LIST_24, 8, 0, Thumb_opcdTab);
 }

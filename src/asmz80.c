@@ -1517,7 +1517,8 @@ void AsmZ80Init(void)
 {
     char *p;
 
+#define OPT (OPT_ATSYM | OPT_DOLLARSYM)
     p = AddAsm(versionName, &Z80_DoCPUOpcode, &Z80_DoCPULabelOp, NULL);
-    AddCPU(p, "Z80",   CPU_Z80,   LITTLE_END, ADDR_16, LIST_24, 8, Z80_opcdTab);
-    AddCPU(p, "GBZ80", CPU_GBZ80, LITTLE_END, ADDR_16, LIST_24, 8, Z80_opcdTab);
+    AddCPU(p, "Z80",   CPU_Z80,   LITTLE_END, ADDR_16, LIST_24, 8, OPT, Z80_opcdTab);
+    AddCPU(p, "GBZ80", CPU_GBZ80, LITTLE_END, ADDR_16, LIST_24, 8, OPT, Z80_opcdTab);
 }

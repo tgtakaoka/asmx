@@ -311,7 +311,7 @@ void Asm8085Init(void)
     char *p;
 
     p = AddAsm(versionName, &I8085_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "8080",  CPU_8080,  LITTLE_END, ADDR_16, LIST_24, 8, I8085_opcdTab);
-    AddCPU(p, "8085",  CPU_8085,  LITTLE_END, ADDR_16, LIST_24, 8, I8085_opcdTab);
-    AddCPU(p, "8085U", CPU_8085U, LITTLE_END, ADDR_16, LIST_24, 8, I8085_opcdTab);
+    AddCPU(p, "8080",  CPU_8080,  LITTLE_END, ADDR_16, LIST_24, 8, 0, I8085_opcdTab);
+    AddCPU(p, "8085",  CPU_8085,  LITTLE_END, ADDR_16, LIST_24, 8, 0, I8085_opcdTab);
+    AddCPU(p, "8085U", CPU_8085U, LITTLE_END, ADDR_16, LIST_24, 8, 0, I8085_opcdTab);
 }

@@ -83,23 +83,30 @@ Anyhow, it works pretty well for what I want it to do.
 
 <HR>
 
-<H2>BUILDING IT</H2>
+<H2>HOW TO BUILD asmx</H2>
 
-Version 2.0 now has a make file that should work on Unix/Linux
-type operating systems.  Just run the "<tt>make</tt>" command
-and it will create the <tt>asmx</tt> binary.  To install
-it, type "<tt>make install</tt>" and it will install to <tt>~/bin</tt> (unless you
-change the makefile to install it somewhere else).  Symbolic links
-are generated so that each CPU assembler can be used with a
-separate command, as in version 1.
-<P>
-If you can't use the make file, the simplest way is to go into the <tt>src</tt>
-subdirectory and enter this command:
-<P>
-  <tt>gcc *.c -o asmx</tt>
-<P>
+The standard way to build asmx is using the makefile:
+<p>
+<pre>  make</pre>
+<p>
+This will create the asmx binary in the src sub-directory.
 That's it.  Now you will might want to copy it to your
 <tt>/usr/local/bin</tt> or <tt>~/bin</tt> directory, but that's your choice.
+<p>
+If you are using a unix-like OS such as Linux, OS X, or BSD, you
+can also use:
+<p>
+<pre>  make install</pre>
+<p>
+This will install the binaries to <tt>~/bin</tt>, unless you change the
+makefile to install it somewhere else. Symbolic links are generated
+so that each CPU assembler can be used with a separate command.
+<p>
+If you can't use the makefile, the simplest way is this:
+<p>
+<pre>  gcc *.c -o asmx</pre>
+<p>
+Windows users should install Cygwin as the easiest way to get GCC.
 
 <HR>
 
@@ -108,7 +115,7 @@ That's it.  Now you will might want to copy it to your
 Just give it the name of your assembler source file, and
 whatever options you want.
 <P>
-  <tt>asm6502 [options] srcfile</tt>
+  <tt>asmx [options] srcfile</tt>
 <P>
 Here are the command line options:
 <P>
@@ -123,15 +130,15 @@ Here are the command line options:
     -s19                output object file in Motorola S9 format (16-bit address)
     -s28                output object file in Motorola S9 format (24-bit address)
     -s37                output object file in Motorola S9 format (32-bit address)
-    -b [baseaddr]       output object file as binary with optional base address
+    -b [base[-end]]     output object file as binary with optional base/end addresses
     -c                  send object code to stdout
     -C cputype          specify default CPU type (currently 6502)
 </pre><P>
 Example:
 <P>
-  <tt>asm6502 -l -o -w -e program.asm</tt>
+  <tt>asmx -l -o -w -e program.asm</tt>
 <P>
-This assembles the 6502 source file "<tt>program.asm</tt>", shows warnings and
+This assembles the source file "<tt>program.asm</tt>", shows warnings and
 errors to the screen, creates a listing file "<tt>program.asm.lst</tt>", and
 puts the object code in an Intel hex format file named "<tt>program.asm.hex</tt>".
 (Binary files get named "<tt>program.asm.bin</tt>", and Motorola S9 files get an
@@ -145,21 +152,23 @@ Notes:
 <P>
   The value in <tt>-d</tt> must be a number.  No expressions are allowed.  The
   valid forms are:
-<table>
-    <tr><td><tt>-d label</tt>          <td>defines the label as <tt>EQU 0</tt>
-    <tr><td><tt>-d label=value</tt>    <td>defines the label as <tt>EQU value</tt>
-    <tr><td><tt>-d label:=value</tt>   <td>defines the label as <tt>SET value</tt>
+<P>
+<table style='margin-left:20pt'>
+    <tr><td><tt>-d label</tt>          <td> &nbsp; defines the label as <tt>EQU 0</tt>
+    <tr><td><tt>-d label=value</tt>    <td> &nbsp; defines the label as <tt>EQU value</tt>
+    <tr><td><tt>-d label:=value</tt>   <td> &nbsp; defines the label as <tt>SET value</tt>
 </table>
 <P>
   By default, object code is written as an Intel hex file unless the <tt>-s</tt> or
   <tt>-b</tt> option is specified.
 <P>
   The value in <tt>-b</tt> specifies the start address for your binary file. If you
-  are making code for a ROM that starts at 0xC000, use "<tt>-b 0xC000</tt>" and the
-  first byte of the object file will be whatever belongs at 0xC000. Anything
-  at a lower address is not written to the file, and any gaps are filled
-  with 0xFF. Be careful about using large <tt>ORG</tt> values or the resulting
-  binary file could become VERY large.
+  are making code for a ROM at address range 0xC000-0xFFFF, use "<tt>-b 0xC000-0xFFFF</tt>"
+  and the first byte of the object file will be whatever belongs at 0xC000. Anything
+  at a lower address is not written to the file, any gaps are filled
+  with 0xFF, and no bytes past 0xFFFF are written to the file. The object file is <i>not</i>
+  padded to the full address range. Be careful about using large <tt>ORG</tt> values without
+  an end address, or the resulting binary file could become VERY large.
 <P>
   The <tt>-c</tt> and <tt>-o</tt> options are incompatible.  Attempting to use both will
   result in an error.  Normal screen output (pass number, total errors,
@@ -251,7 +260,7 @@ Operator precedence:
   <tt>&lt; &lt;= &gt; &gt;= = == !=</tt><br>
   <tt>&amp; &amp;&amp; | || ^ &lt;&lt; &gt;&gt;</tt>
 <P>
-WARNING:
+WARNING:<br>
   Shifts and AND, OR, and XOR have a lower precedence than the comparison
   operators!  You must use parentheses when combining them with comparison operators!
 <P>
@@ -321,6 +330,10 @@ NOTE:
 
   Creates a text string preceeded by a single byte indicating the length
   of the string.  This is equivalent to a Pascal-style string.
+
+<H3>ASSERT expr</H3>
+
+  Generates an error if expr is false (equals zero).
 
 <H3>ALIGN</H3>
 
@@ -580,6 +593,12 @@ NOTE:
    <tr><td>8080          <td>Intel 8080
    <tr><td>8085          <td>Intel 8085
    <tr><td>8085U         <td>Intel 8085 with undocumented instructions
+   <tr><td>ARM           <td>ARM (32-bit little-endian)
+   <tr><td>ARM_BE        <td>ARM big-endian
+   <tr><td>ARM_LE        <td>ARM little-endian
+   <tr><td>THUMB         <td>ARM Thumb (16-bit little-endian)
+   <tr><td>THUMB_BE      <td>ARM Thumb big-endian
+   <tr><td>THUMB_LE      <td>ARM Thumb little-endian
    <tr><td>F8            <td>Fairchild F8
    <tr><td>TOM           <td>Atari Jaguar GPU
    <tr><td>JERRY         <td>Atari Jaguar DSP
@@ -1182,10 +1201,32 @@ symbol shows its name, value, and flags.  The flags are:
 
 <HR>
 
-<H3>Version 2.0b4 changes (2007-07-xx)</H3>
+<H3>Version 2.0b4 changes (2007-08-06)</H3>
 
 <UL>
   <LI>Made HTML version of documentation.
+  <LI>Started adding ARM and ARM Thumb instruction sets, at the ARM5 level.
+      (Thumb is currently complete, ARM is missing LDC/STC and ADR/ADRL.)
+  <LI>Changed 'parm' in opcode table to a u_long to handle more complex
+      instruction sets.
+  <LI>Changed opcode parser to accept opcodes ending in wildcards.
+</UL>
+
+<HR>
+
+<H3>Version 2.0b5 changes (2009-10-31)</H3>
+
+<UL>
+  <LI>Added ARM LDC/STC instructions.
+     <BR>- ARM still needs range checks
+  <LI>Added ASSERT pseudo-op.
+  <LI>-b command line option now takes an end address (ex: "0x0000-0xFFFF")
+  <LI>Error checking is now done on numbers in -b and -d command line options.
+  <LI>Added -t command line option to output TRSDOS format binary files.
+  <LI>Started to deprecate "@" for temp labels (#define TEMP_LBLAT to enable @-labels)
+  <LI>Z80 can now use labels starting with and containing '$' and '@' (for some old TRSDOS code I had)
+      <BR>This is enabled by OPT_ATSYM and OPT_DOLLARSYM options in the AddCPU call)
+  <LI>Added 6309 support to 6809 assembler
 </UL>
 
 <HR>
@@ -1193,8 +1234,9 @@ symbol shows its name, value, and flags.  The flags are:
 <H2>To do:</H2>
 
 <UL>
-  <LI>* add an end value for the <tt>-b</tt> command line option?
+  <LI>Code needs to be reformatted to Linux kernel style for reliable SCM merges
   <LI>* error or warning if <tt>-b</tt> and data is out of range? (reset warning at <tt>ORG</tt>?)
+  <LI>* make test files for assembler pseudo-ops
   <LI><tt>DS</tt> should be scaled by the <tt>WORDSIZE</tt>?
   <LI>The <tt>SUBROUTINE</tt> pseudo-op needs to be tweaked.  It should either define the subroutine name
       as a label, or use the label on the left side of the line as the name of the subroutine.
@@ -1222,7 +1264,7 @@ symbol shows its name, value, and flags.  The flags are:
 
 <UL>
 <!--  <LI>(none currently known) -->
-  <LI>"<tt>MOVE.B</tt>" by itself generates too many errors
+<li>8051 EQU needs to AND with 0xFF87, not 0x87?
 </UL>
 
 </BODY>

@@ -369,5 +369,5 @@ void AsmF8Init(void)
     char *p;
 
     p = AddAsm(versionName, &F8_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "F8", 0, BIG_END, ADDR_16, LIST_24, 8, F8_opcdTab);
+    AddCPU(p, "F8", 0, BIG_END, ADDR_16, LIST_24, 8, 0, F8_opcdTab);
 }

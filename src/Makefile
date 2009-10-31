@@ -2,11 +2,12 @@
 # this should work with GNU make, gcc, and bash shell
 
 # version number
-VERSION = 2.0b4
+VERSION = 2.0b5
 
 # C compiler target architecture
 #   this is the setting for OS X to create a universal PPC/Intel binary
 #   comment it out if you aren't running OS X for Intel
+#TARGET_ARCH = -arch ppc
 TARGET_ARCH = -arch ppc -arch i686
 
 # C compiler flags
@@ -33,6 +34,7 @@ strip: asmx
 
 .PHONY: install
 install: asmx
+	mkdir -pv $(INSTALL_DIR)
 	rm -f $(INSTALL_DIR)/asmx
 	cp asmx $(INSTALL_DIR)
 # select aliases for your favorite assemblers here:
@@ -73,9 +75,9 @@ it: clean install-strip zip test
 
 .PHONY: zip
 zip: asmx # build everything first to check for errors
-	rm -f ../src/.DS_Store ../test/.DS_Store ../test/rel/.DS_Store
-	-mv -f ../asmx-$(VERSION).zip ../asmx-$(VERSION).zip.old
-	cd .. && zip -rq asmx-$(VERSION).zip Makefile README.txt asmx-doc.html src/*.c src/*.h src/Makefile test
+	rm -f ../.DS_Store ../src/.DS_Store ../test/.DS_Store ../test/rel/.DS_Store
+	-mv -f ../zip/asmx-$(VERSION).zip ../zip/asmx-$(VERSION).zip.old
+	cd .. && zip -rq zip/asmx-$(VERSION).zip Makefile README.txt asmx-doc.html src/*.c src/*.h src/Makefile test
 
 .PHONY: test
 test: asmx
@@ -84,4 +86,4 @@ test: asmx
 
 .PHONY: clean
 clean:
-	rm -f $(OBJS) asmx
+	rm -f $(OBJS) asmx ../test/*.asm.hex ../test/*.asm.lst

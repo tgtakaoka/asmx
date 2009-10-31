@@ -1,3 +1,4 @@
+#!/bin/bash
 # this tests the various assemblers' instruction lists by
 # comparing with pre-assembled .hex files in the ref sub-directory
 
@@ -36,6 +37,7 @@ testit 6801
 testit 6805
 testit 68hcs08
 testit 6809
+testit 6309
 testit 8048
 testit 8051
 testit 8085u

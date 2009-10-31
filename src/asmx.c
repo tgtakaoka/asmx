@@ -6,6 +6,7 @@
 
 //#define ENABLE_REP    // uncomment to enable REPEAT pseudo-op (still under development)
 //#define DOLLAR_SYM    // allow symbols to start with '$' (incompatible with $ for hexadecimal constants!)
+//#define TEMP_LBLAT    // enable use of '@' temporary labels (deprecated)
 
 #ifndef VERSION // should be defined on the command line
 #define VERSION "2.0"
@@ -28,15 +29,6 @@ typedef   unsigned int    u_int;
 typedef   unsigned long   u_long;
 #endif
 
-#if 0 // moved to asmx.h
-// a few useful typedefs
-typedef unsigned char  bool;    // i guess bool is a c++ thing
-//enum { FALSE, TRUE };
-const bool FALSE = 0;
-const bool TRUE  = 1;
-typedef char Str255[256];       // generic string type
-#endif
-
 // --------------------------------------------------------------
 
 const char      *progname;      // pointer to argv[0]
@@ -44,7 +36,7 @@ const char      *progname;      // pointer to argv[0]
 struct SymRec
 {
     struct SymRec   *next;      // pointer to next symtab entry
-    u_long          value;     // symbol value
+    u_long          value;      // symbol value
     bool            defined;    // TRUE if defined
     bool            multiDef;   // TRUE if multiply defined
     bool            isSet;      // TRUE if defined with SET pseudo
@@ -134,6 +126,7 @@ struct CpuRec
     int             listWid;        // listing hex area width, LIST_16 or LIST_24
     int             wordSize;       // addressing word size in bits
     OpcdPtr         opcdTab;        // opcdTab[] for this assembler
+    int             opts;           // option flags
     char            name[1];        // all-uppercase name of CPU
 };
 typedef struct CpuRec *CpuPtr;
@@ -190,8 +183,9 @@ bool            cl_Warn;            // TRUE for warnings to screen
 bool            cl_List;            // TRUE to generate listing file
 bool            cl_Obj;             // TRUE to generate object file
 bool            cl_ObjType;         // type of object file to generate:
-enum { OBJ_HEX, OBJ_S9, OBJ_BIN };  // values for cl_Obj
+enum { OBJ_HEX, OBJ_S9, OBJ_BIN, OBJ_TRSDOS };  // values for cl_Obj
 u_long          cl_Binbase;         // base address for OBJ_BIN
+u_long          cl_Binend;          // end address for OBJ_BIN
 int             cl_S9type;          // type of S9 file: 9, 19, 28, or 37
 bool            cl_Stdout;          // TRUE to send object file to stdout
 bool            cl_ListP1;          // TRUE to show listing in first assembler pass
@@ -215,6 +209,7 @@ int             curCPU;             // current CPU index for current assembler
 int             endian;             // CPU endian: UNKNOWN_END, LITTLE_END, BIG_END
 int             addrWid;            // CPU address width: ADDR_16, ADDR_32
 int             listWid;            // listing hex area width: LIST_16, LIST_24
+int             opts;               // current CPU's option flags
 int             wordSize;           // current CPU's addressing size in bits
 int             wordDiv;            // scaling factor for current word size
 int             addrMax;            // maximum addrWid used
@@ -264,6 +259,7 @@ enum
     o_LIST,     // LIST pseudo-op
     o_OPT,      // OPT pseudo-op
     o_ERROR,    // ERROR pseudo-op
+    o_ASSERT,   // ASSERT pseudo-op
     o_MACRO,    // MACRO pseudo-op
 #ifdef ENABLE_REP
     o_REPEAT,   // REPEAT pseudo-op
@@ -340,6 +336,7 @@ struct OpcdRec opcdTab2[] =
     {"LIST",      o_LIST,     0},
     {"OPT",       o_OPT,      0},
     {"ERROR",     o_ERROR,    0},
+    {"ASSERT",    o_ASSERT,   0},
 #ifdef ENABLE_REP
     {"REPEAT",    o_REPEAT,   0},
 #endif
@@ -427,6 +424,7 @@ void AddCPU(void *as,           // assembler for this CPU
             int addrWid,        // assembler 32-bit
             int listWid,        // listing width
             int wordSize,       // addressing word size in bits
+            int opts,           // option flags
             struct OpcdRec opcdTab[])  // assembler opcode table
 {
     CpuPtr p;
@@ -441,6 +439,7 @@ void AddCPU(void *as,           // assembler for this CPU
     p -> addrWid  = addrWid;
     p -> listWid  = listWid;
     p -> wordSize = wordSize;
+    p -> opts     = opts;
     p -> opcdTab  = opcdTab;
 
     cpuTab = p;
@@ -485,6 +484,7 @@ bool SetCPU(char *cpuName)
         listWid  = p -> listWid;
         wordSize = p -> wordSize;
         opcdTab  = p -> opcdTab;
+        opts     = p -> opts;
         SetWordSize(wordSize);
 
         CodeFlush();    // make a visual change in the hex object file
@@ -507,7 +507,7 @@ void AsmInit(void)
 #define ASSEMBLER(name) extern void Asm ## name ## Init(void); Asm ## name ## Init();
 
     p = AddAsm("None", NULL, NULL, NULL);
-    AddCPU(p, "NONE",  0, UNKNOWN_END, ADDR_32, LIST_24, 8, NULL);
+    AddCPU(p, "NONE",  0, UNKNOWN_END, ADDR_32, LIST_24, 8, 0, NULL);
 
     ASSEMBLER(1802);
     ASSEMBLER(6502);
@@ -1130,13 +1130,27 @@ int GetWord(char *word)
     if (c)
     {
         // test for alphanumeric token
+#if 1
+        if (isalphanum(c) ||
+            (
+             (((opts & OPT_DOLLARSYM) && c == '$') || ((opts & OPT_ATSYM) && c == '@'))
+             && ((isalphanum(linePtr[1]) ||
+                 linePtr[1]=='$' ||
+                 ((opts & OPT_ATSYM) && linePtr[1]=='@'))
+                )
+           ))
+
+#else
+
 #ifdef DOLLAR_SYM
         if (isalphanum(c) || (c == '$' && (isalphanum(linePtr[1]) || linePtr[1]=='$')))
 #else
         if (isalphanum(c))
 #endif
+
+#endif
         {
-            while (isalphanum(c) || c == '$')
+            while (isalphanum(c) || c == '$' || ((opts & OPT_ATSYM) && c == '@'))
             {
                 *word++ = toupper(c);
                 c = *++linePtr;
@@ -1376,6 +1390,24 @@ int GetReg(const char *regList)
     }
 
     return FindReg(word,regList);
+}
+
+
+// check if a register from FindReg/GetReg is valid
+int CheckReg(int reg) // may want to add a maxreg parameter
+{
+    if (reg == reg_EOL)
+    {
+        MissingOperand();      // abort if not valid register
+        return 1;
+    }
+//  if ((reg < 0) || (reg > maxReg))
+    if (reg < 0)
+    {
+        IllegalOperand();      // abort if not valid register
+        return 1;
+    }
+    return 0;
 }
 
 
@@ -2087,7 +2119,11 @@ void DumpSymTab(void)
     p = symTab;
     while (p)
     {
-        if (tempSymFlag || !(strchr(p->name,'.') || strchr(p->name,'@')))
+#ifdef TEMP_LBLAT
+        if (tempSymFlag || !(strchr(p->name, '.') || strchr(p->name, '@')))
+#else
+        if (tempSymFlag || !strchr(p->name, '.'))
+#endif
         {
             DumpSym(p,s,&w);
             p = p -> next;
@@ -2325,7 +2361,9 @@ int Factor(void)
             // now try it as a local ".symbol"
             linePtr = oldLine;
             // fall-through...
+#ifdef TEMP_LBLAT
         case '@':
+#endif
             GetWord(word);
             if (token == '.' && subrLabl[0])    strcpy(s,subrLabl);
                                         else    strcpy(s,lastLabl);
@@ -2590,7 +2628,16 @@ int EvalLBranch(int instrLen)
 // --------------------------------------------------------------
 // object file generation
 
-
+// record types -- note that 0 and 1 are used directly for .hex
+enum
+{
+    REC_DATA = 0,   // data record
+    REC_XFER = 1,   // transfer address record
+    REC_HEDR = 2,   // header record (must be sent before start of data)
+#ifdef CODE_COMMENTS
+    REC_CMNT = 3    // comment record
+#endif // CODE_COMMENTS
+};
     u_char  hex_buf[IHEX_SIZE]; // buffer for current line of object data
     u_long  hex_len;            // current size of object data buffer
     u_long  hex_base;           // address of start of object data buffer
@@ -2619,16 +2666,18 @@ int EvalLBranch(int instrLen)
 // ee    = checksum byte: add all bytes aa through dd
 //                        and subtract from 256 (2's complement negate)
 
-void write_ihex(u_long addr, u_char *buf, int len, int rectype)
+void write_ihex(u_long addr, u_char *buf, u_long len, int rectype)
 {
     int i,chksum;
 
+    if (rectype > REC_XFER) return;
+
     // if transfer record with long address, write extended address record
-    if (rectype == 1 && (addr & 0xFFFF0000))
+    if (rectype == REC_XFER && (addr & 0xFFFF0000))
         write_ihex(addr >> 16, buf, 0, 5);
 
     // if data record with long address, write extended address record
-    if (rectype == 0 && (addr >> 16) != hex_page)
+    if (rectype == REC_DATA && (addr >> 16) != hex_page)
     {
         write_ihex(addr >> 16, buf, 0, 4);
         hex_page = addr >> 16;
@@ -2638,17 +2687,17 @@ void write_ihex(u_long addr, u_char *buf, int len, int rectype)
     chksum = len + (addr >> 8) + addr + rectype;
 
     // print length, address, and record type
-    fprintf(object,":%.2X%.4lX%.2X",len,addr & 0xFFFF,rectype);
+    fprintf(object,":%.2lX%.4lX%.2X", len, addr & 0xFFFF, rectype);
 
     // print data while updating checksum
     for (i=0; i<len; i++)
     {
-        fprintf(object,"%.2X",buf[i]);
+        fprintf(object, "%.2X", buf[i]);
         chksum = chksum + buf[i];
     }
 
     // print final checksum
-    fprintf(object,"%.2X\n",(-chksum) & 0xFF);
+    fprintf(object, "%.2X\n", (-chksum) & 0xFF);
 }
 
 
@@ -2673,33 +2722,35 @@ void write_ihex(u_long addr, u_char *buf, int len, int rectype)
 // ee    = checksum byte: add all bytes bb through dd
 //                        and subtract from 255 (1's complement)
 
-void write_srec(u_long addr, u_char *buf, int len, int rectype)
+void write_srec(u_long addr, u_char *buf, u_long len, int rectype)
 {
     int i,chksum;
+
+    if (rectype > REC_XFER) return; // should output S0 record?
 
     // start checksum with length and 16-bit address
     chksum = len+3 + ((addr >> 8) & 0xFF) + (addr & 0xFF);
 
     // determine S9 record type
-    if (rectype)    i = cl_S9type % 10;  // xfer record = S9/S8/S7
-            else    i = cl_S9type / 10;  // code record = S1/S2/S3
+    if (rectype == REC_XFER) i = cl_S9type % 10;    // xfer record = S9/S8/S7
+                        else i = cl_S9type / 10;    // code record = S1/S2/S3
 
     // print length and address, and update checksum for long address
     switch(cl_S9type)
     {
         case 37:
-            fprintf(object,"S%d%.2X%.8lX", i, len+5, addr);
+            fprintf(object,"S%d%.2lX%.8lX", i, len+5, addr);
             chksum = chksum + ((addr >> 24) & 0xFF) + ((addr >> 16) & 0xFF) + 2;
             break;
 
         case 28:
-            fprintf(object,"S%d%.2X%.6lX", i, len+4, addr & 0xFFFFFF) + 1;
+            fprintf(object,"S%d%.2lX%.6lX", i, len+4, addr & 0xFFFFFF) + 1;
             chksum = chksum + ((addr >> 16) & 0xFF);
             break;
 
         default:
             if (i == 0) i = 1; // handle "-s9" option
-            fprintf(object,"S%d%.2X%.4lX", i, len+3, addr & 0xFFFF);
+            fprintf(object,"S%d%.2lX%.4lX", i, len+3, addr & 0xFFFF);
     }
 
     // print data while updating checksum
@@ -2714,21 +2765,28 @@ void write_srec(u_long addr, u_char *buf, int len, int rectype)
 }
 
 
-void write_bin(u_long addr, u_char *buf, int len, int rectype)
+void write_bin(u_long addr, u_char *buf, u_long len, int rectype)
 {
     u_long i;
 
-    if (!rectype)
+    if (rectype == REC_DATA)
     {
         // return if end of data less than base address
         if (addr + len <= cl_Binbase) return;
 
+        // return if start of data greater than end address
+        if (addr > cl_Binend) return;
+
         // if data crosses base address, adjust start of data
-        if (addr < cl_Binbase && addr+len > cl_Binbase)
+        if (addr < cl_Binbase)
         {
             buf = buf + cl_Binbase - addr;
             addr = cl_Binbase;
         }
+
+        // if data crossses end address, adjust length of data
+        if (addr+len-1 > cl_Binend)
+            len = cl_Binend - addr + 1;
 
         // if addr is beyond current EOF, write (addr-bin_eof) bytes of 0xFF padding
         if (addr - cl_Binbase > bin_eof)
@@ -2752,17 +2810,91 @@ void write_bin(u_long addr, u_char *buf, int len, int rectype)
 }
 
 
+u_char trs_buf[256]; // buffer for current object code data, used instead of hex_buf
+
+void write_trsdos(u_long addr, u_char *buf, u_long len, int rectype)
+{
+    switch(rectype)
+    {
+        case REC_DATA:  // write data record
+            // 01 len+2 ll hh data...
+            // NOTE: buf is ignored in favor of using trs_buf
+            fputc(0x01, object);
+            fputc((len+2) & 0xFF, object);
+            fputc(addr & 0xFF, object);
+            fputc((addr >> 8) & 0xFF, object);
+
+            fwrite(trs_buf, len, 1, object);
+
+            break;
+
+        case REC_XFER:  // write transfer record
+            // 02 02 ll hh
+            fputc(0x02, object);
+            fputc(0x02, object);
+            fputc(addr & 0xFF, object);
+            fputc((addr >> 8) & 0xFF, object);
+
+            break;
+
+        case REC_HEDR:  // write header record
+        {
+            // 05 06 dd dd dd dd dd dd - dd = header data, padded with blanks
+            int i;
+
+#if 1
+            // Note: trimming to six chars uppercase for now only to keep with standard usage
+            fputc(0x05, object);
+            fputc(0x06, object);
+
+            for (i=0; i<6; i++)
+            {
+                if (*buf == 0 || *buf == '.')
+                    fputc(' ', object);
+                else
+                    fputc(toupper(*buf++), object);
+            }
+#else
+            fputc(0x05, object);
+            fputc(len, object);
+
+            fwrite(buf, len, 1, object);
+#endif
+
+            break;
+        }
+
+#ifdef CODE_COMMENTS
+        case REC_CMNT:  // write copyright record
+        {
+            // 1F len data
+            int i;
+
+            fputc(0x1F, object);
+            fputc(len,  object);
+
+            for (i=0; i<len; i++)
+                fputc(*buf++, object);
+
+            break;
+        }
+#endif // CODE_COMMENTS
+    }
+}
+
+
 // rectype 0 = code, rectype 1 = xfer
-void write_hex(u_long addr, u_char *buf, int len, int rectype)
+void write_hex(u_long addr, u_char *buf, u_long len, int rectype)
 {
     if (cl_Obj || cl_Stdout)
     {
         switch(cl_ObjType)
         {
             default:
-            case OBJ_HEX: write_ihex(addr, buf, len, rectype); break;
-            case OBJ_S9:  write_srec(addr, buf, len, rectype); break;
-            case OBJ_BIN: write_bin (addr, buf, len, rectype); break;
+            case OBJ_HEX:    write_ihex  (addr, buf, len, rectype); break;
+            case OBJ_S9:     write_srec  (addr, buf, len, rectype); break;
+            case OBJ_BIN:    write_bin   (addr, buf, len, rectype); break;
+            case OBJ_TRSDOS: write_trsdos(addr, buf, len, rectype); break;
         }
     }
 }
@@ -2782,7 +2914,7 @@ void CodeFlush(void)
 {
     if (hex_len)
     {
-        write_hex(hex_base, hex_buf, hex_len, 0);
+        write_hex(hex_base, hex_buf, hex_len, REC_DATA);
         hex_len  = 0;
         hex_base = hex_base + hex_len;
         hex_addr = hex_base;
@@ -2801,15 +2933,44 @@ void CodeOut(int byte)
             hex_addr = codPtr;
         }
 
-        hex_buf[hex_len++] = byte;
-        hex_addr++;
+        if (cl_ObjType == OBJ_TRSDOS)
+        {
+            trs_buf[hex_len++] = byte;
+            hex_addr++;
 
-        if (hex_len == IHEX_SIZE)
-            CodeFlush();
+            if (hex_len == 256)
+                CodeFlush();
+        }
+        else
+        {
+            hex_buf[hex_len++] = byte;
+            hex_addr++;
+
+            if (hex_len == IHEX_SIZE)
+                CodeFlush();
+        }
     }
     locPtr++;
     codPtr++;
 }
+
+
+void CodeHeader(char *s)
+{
+    CodeFlush();
+
+    write_hex(0, (u_char *) s, strlen(s), REC_HEDR);
+}
+
+
+#ifdef CODE_COMMENTS
+void CodeComment(char *s)
+{
+    CodeFlush();
+
+    write_hex(0, (u_char *) s, strlen(s), REC_CMNT);
+}
+#endif // CODE_COMMENTS
 
 
 void CodeEnd(void)
@@ -2819,7 +2980,7 @@ void CodeEnd(void)
     if (pass == 2)
     {
         if (xferFound)
-            write_hex(xferAddr, hex_buf, 0, 1);
+            write_hex(xferAddr, hex_buf, 0, REC_XFER);
     }
 }
 
@@ -3130,6 +3291,14 @@ void InstrL(u_long l1)
 {
     InstrClear();
     InstrAddL(l1);
+}
+
+
+void InstrLL(u_long l1, u_long l2)
+{
+    InstrClear();
+    InstrAddL(l1);
+    InstrAddL(l2);
 }
 
 
@@ -4142,6 +4311,14 @@ void DoLabelOp(int typ, int parm, char *labl)
             Error(linePtr);
             break;
 
+        case o_ASSERT:
+            if (labl[0])
+                Error("Label not allowed");
+            val = Eval();
+            if (!val)
+                Error("Assertion failed");
+            break;
+
         case o_MACRO:
             // see if label already provided
             if (labl[0] == 0)
@@ -4159,7 +4336,11 @@ void DoLabelOp(int typ, int parm, char *labl)
             }
 
             // don't allow temporary labels as macro names
-            if (strchr(labl,'@') || strchr(labl,'.'))
+#ifdef TEMP_LBLAT
+            if (strchr(labl, '.') || (!(opts & OPT_ATSYM) && strchr(labl, '@')))
+#else
+            if (strchr(labl, '.'))
+#endif
             {
                 Error("Can not use temporary labels as macro names");
                 break;
@@ -4217,7 +4398,11 @@ void DoLabelOp(int typ, int parm, char *labl)
 
                     // get label
                     labl[0] = 0;
-                    if (isalphanum(*linePtr) || *linePtr == '@' || *linePtr == '.')
+#ifdef TEMP_LBLAT
+                    if (isalphanum(*linePtr) || *linePtr == '.' || *linePtr == '@')
+#else
+                    if (isalphanum(*linePtr) || *linePtr == '.' || ((opts & OPT_ATSYM) && *linePtr == '@'))
+#endif
                     {
                         token = GetWord(labl);
                         if (token)
@@ -4227,14 +4412,18 @@ void DoLabelOp(int typ, int parm, char *labl)
 
                         if (labl[0])
                         {
-                            if (token == '@' || token == '.')
+#ifdef TEMP_LBLAT
+                            if (token == '.' || token == '@')
+#else
+                            if (token == '.')
+#endif
                             {
                                 GetWord(word);
                                 if (token == '.' && subrLabl[0])    strcpy(labl,subrLabl);
                                                             else    strcpy(labl,lastLabl);
                                 labl[strlen(labl)+1] = 0;
                                 labl[strlen(labl)]   = token;
-                                strcat(labl,word);          // labl = lastLabl + "@" + word;
+                                strcat(labl,word);          // labl = lastLabl + "." + word;
                             }
                             else
                                 strcpy(lastLabl,labl);
@@ -4398,7 +4587,11 @@ void DoLabelOp(int typ, int parm, char *labl)
 
                     // get label
                     labl[0] = 0;
-                    if (isalphanum(*linePtr) || *linePtr == '@' || *linePtr == '.')
+#ifdef TEMP_LBLAT
+                    if (isalphanum(*linePtr) || *linePtr == '.')
+#else
+                    if (isalphanum(*linePtr) || *linePtr == '.' || ((opts & OPT_ATSYM) && *linePtr == '@'))
+#endif
                     {
                         token = GetWord(labl);
                         if (token)
@@ -4408,14 +4601,18 @@ void DoLabelOp(int typ, int parm, char *labl)
 
                         if (labl[0])
                         {
-                            if (token == '@' || token == '.')
+#ifdef TEMP_LBLAT
+                            if (token == '.' || token == '@'))
+#else
+                            if (token == '.')
+#endif
                             {
                                 GetWord(word);
                                 if (token == '.' && subrLabl[0])    strcpy(labl,subrLabl);
                                                             else    strcpy(labl,lastLabl);
                                 labl[strlen(labl)+1] = 0;
                                 labl[strlen(labl)]   = token;
-                                strcat(labl,word);          // labl = lastLabl + "@" + word;
+                                strcat(labl,word);          // labl = lastLabl + "." + word;
                             }
                             else
                                 strcpy(lastLabl,labl);
@@ -4593,7 +4790,11 @@ void DoLine()
 
     // look for label at beginning of line
     labl[0] = 0;
-    if (isalphaul(*linePtr) || *linePtr == '$' || *linePtr == '@' || *linePtr == '.')
+#ifdef TEMP_LBLAT
+    if (isalphaul(*linePtr) || *linePtr == '$' || *linePtr == '.' || *linePtr == '@')
+#else
+    if (isalphaul(*linePtr) || *linePtr == '$' || *linePtr == '.' || ((opts & OPT_ATSYM) && *linePtr == '@'))
+#endif
     {
         token = GetWord(labl);
         oldLine = linePtr;
@@ -4604,7 +4805,11 @@ void DoLine()
 
            if (labl[0])
         {
-            if (token == '@' || token == '.')
+#ifdef TEMP_LBLAT
+            if (token == '.' || token == '@')
+#else
+            if (token == '.')
+#endif
             {
                 GetWord(word);
                 if (token == '.' && FindOpcodeTab((OpcdPtr) &opcdTab2, word, &typ, &parm) )
@@ -4617,7 +4822,7 @@ void DoLine()
                                             else    strcpy(labl,lastLabl);
                 labl[strlen(labl)+1] = 0;
                 labl[strlen(labl)]   = token;
-                strcat(labl,word);          // labl = lastLabl + "@" + word;
+                strcat(labl,word);          // labl = lastLabl + "." + word;
                 }
             }
             else
@@ -4931,6 +5136,7 @@ void DoPass()
     listWid       = LIST_24;
     addrWid       = ADDR_32;
     wordSize      = 8;
+    opts          = 0;
     SetWordSize(wordSize);
     SetCPU(defCPU);
     addrMax       = addrWid;
@@ -4945,6 +5151,8 @@ void DoPass()
         seg = seg -> next;
     }
     curSeg = nullSeg;
+
+    if (pass == 2) CodeHeader(cl_SrcName);
 
     PassInit();
     i = ReadSourceLine(line, sizeof(line));
@@ -5003,28 +5211,29 @@ void stdversion(void)
 void usage(void)
 {
     stdversion();
-    fprintf(stderr,"\n");
-    fprintf(stderr,"Usage:\n");
-    fprintf(stderr,"    %s [options] srcfile\n",progname);
-    fprintf(stderr,"\n");
-    fprintf(stderr,"Options:\n");
-    fprintf(stderr,"    --                  end of options\n");
-    fprintf(stderr,"    -e                  show errors to screen\n");
-    fprintf(stderr,"    -w                  show warnings to screen\n");
-//  fprintf(stderr,"    -1                  output listing during first pass\n");
-    fprintf(stderr,"    -l [filename]       make a listing file, default is srcfile.lst\n");
-    fprintf(stderr,"    -o [filename]       make an object file, default is srcfile.hex or srcfile.s9\n");
-    fprintf(stderr,"    -d label[[:]=value] define a label, and assign an optional value\n");
-//  fprintf(stderr,"    -9                  output object file in Motorola S9 format (16-bit address)\n");
-    fprintf(stderr,"    -s9                 output object file in Motorola S9 format (16-bit address)\n");
-    fprintf(stderr,"    -s19                output object file in Motorola S9 format (16-bit address)\n");
-    fprintf(stderr,"    -s28                output object file in Motorola S9 format (24-bit address)\n");
-    fprintf(stderr,"    -s37                output object file in Motorola S9 format (32-bit address)\n");
-    fprintf(stderr,"    -b [baseaddr]       output object file as binary with optional base address\n");
-    fprintf(stderr,"    -c                  send object code to stdout\n");
-    fprintf(stderr,"    -C cputype          specify default CPU type (currently ");
-    if (defCPU[0]) fprintf(stderr,"%s",defCPU);
-              else fprintf(stderr,"no default");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Usage:\n");
+    fprintf(stderr, "    %s [options] srcfile\n",progname);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "    --                  end of options\n");
+    fprintf(stderr, "    -e                  show errors to screen\n");
+    fprintf(stderr, "    -w                  show warnings to screen\n");
+//  fprintf(stderr, "    -1                  output listing during first pass\n");
+    fprintf(stderr, "    -l [filename]       make a listing file, default is srcfile.lst\n");
+    fprintf(stderr, "    -o [filename]       make an object file, default is srcfile.hex or srcfile.s9\n");
+    fprintf(stderr, "    -d label[[:]=value] define a label, and assign an optional value\n");
+//  fprintf(stderr, "    -9                  output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr, "    -s9                 output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr, "    -s19                output object file in Motorola S9 format (16-bit address)\n");
+    fprintf(stderr, "    -s28                output object file in Motorola S9 format (24-bit address)\n");
+    fprintf(stderr, "    -s37                output object file in Motorola S9 format (32-bit address)\n");
+    fprintf(stderr, "    -b [base[-end]]     output object file as binary with optional base/end addresses\n");
+    fprintf(stderr, "    -t                  output object file in TRSDOS executable format (implies -C Z80)\n");
+    fprintf(stderr, "    -c                  send object code to stdout\n");
+    fprintf(stderr, "    -C cputype          specify default CPU type (currently ");
+    if (defCPU[0]) fprintf(stderr, "%s",defCPU);
+              else fprintf(stderr, "no default");
     fprintf(stderr,")\n");
     exit(1);
 }
@@ -5039,8 +5248,9 @@ void getopts(int argc, char * const argv[])
     int     token;
     int     neg;
 
-    while ((ch = getopt(argc, argv, "ew19b:cd:l:o:s:C:?")) != -1)
+    while ((ch = getopt(argc, argv, "ew19tb:cd:l:o:s:C:?")) != -1)
     {
+        errFlag = FALSE;
         switch (ch)
         {
             case 'e':
@@ -5060,6 +5270,11 @@ void getopts(int argc, char * const argv[])
                 cl_ObjType = OBJ_S9;
                 break;
 
+            case 't':
+                cl_ObjType = OBJ_TRSDOS;
+                strcpy(defCPU, "Z80");
+                break;
+
             case 's':
                 if (optarg[0] == '9' && optarg[1] == 0)
                     cl_S9type = 9;
@@ -5076,13 +5291,42 @@ void getopts(int argc, char * const argv[])
             case 'b':
                 cl_ObjType = OBJ_BIN;
                 cl_Binbase = 0;
+                cl_Binend = 0xFFFFFFFF;
+
                 if (optarg[0] =='-')
-                {
+                {   // -b with no parameter
                     optarg = "";
                     optind--;
                 }
                 else if (*optarg)
-                    cl_Binbase = EvalNum(optarg);
+                {   // - b with parameter
+                    strncpy(line, optarg, 255);
+                    linePtr = line;
+
+                    // get start parameter
+                    if (GetWord(word) != -1) usage();
+                    cl_Binbase = EvalNum(word);
+                    if (errFlag)
+                    {
+                        printf("Invalid number '%s' in -b option\n",word);
+                        usage();
+                    }
+
+                    // get optional end parameter
+                    token = GetWord(word);
+                    if (token)
+                    {
+                        if (token != '-') usage();
+
+                        if (GetWord(word) != -1) usage();
+                        cl_Binend = EvalNum(word);
+                        if (errFlag)
+                        {
+                            printf("Invalid number '%s' in -b option\n",word);
+                            usage();
+                        }
+                    }
+                }
                 break;
 
             case 'c':
@@ -5115,13 +5359,18 @@ void getopts(int argc, char * const argv[])
                         GetWord(word);
                     }
                     val = neg * EvalNum(word);
+                    if (errFlag)
+                    {
+                        printf("Invalid number '%s' in -d option\n",word);
+                        usage();
+                    }
                 }
                 DefSym(labl,val,setSym,!setSym);
                 break;
 
             case 'l':
                 cl_List = TRUE;
-                if (optarg[0] =='-')
+                if (optarg[0] == '-')
                 {
                     optarg = "";
                     optind--;
@@ -5136,7 +5385,7 @@ void getopts(int argc, char * const argv[])
                     usage();
                 }
                 cl_Obj = TRUE;
-                if (optarg[0] =='-')
+                if (optarg[0] == '-')
                 {
                     optarg = "";
                     optind--;
@@ -5170,7 +5419,7 @@ void getopts(int argc, char * const argv[])
     }
 
 #if 1
-    // -b or -9 must force -o!
+    // -b or -9 or -t must force -o!
     if (cl_ObjType != OBJ_HEX && !cl_Stdout && !cl_Obj)
         cl_Obj = TRUE;
 #endif
@@ -5206,6 +5455,11 @@ void getopts(int argc, char * const argv[])
             case OBJ_BIN:
                 strncpy(cl_ObjName, cl_SrcName, 255-4);
                 strcat (cl_ObjName, ".bin");
+                break;
+
+            case OBJ_TRSDOS:
+                strncpy(cl_ObjName, cl_SrcName, 255-4);
+                strcat (cl_ObjName, ".cmd");
                 break;
 
             default:

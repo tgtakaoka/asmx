@@ -526,6 +526,6 @@ void AsmJagInit(void)
     char *p;
 
     p = AddAsm(versionName, &Jag_DoCPUOpcode, NULL, NULL);
-    AddCPU(p, "TOM",   CPU_TOM,   BIG_END, ADDR_16, LIST_24, 16, Jag_opcdTab);
-    AddCPU(p, "JERRY", CPU_JERRY, BIG_END, ADDR_16, LIST_24, 16, Jag_opcdTab);
+    AddCPU(p, "TOM",   CPU_TOM,   BIG_END, ADDR_16, LIST_24, 16, 0, Jag_opcdTab);
+    AddCPU(p, "JERRY", CPU_JERRY, BIG_END, ADDR_16, LIST_24, 16, 0, Jag_opcdTab);
 }

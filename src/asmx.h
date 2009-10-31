@@ -1,4 +1,4 @@
-// asmx.h - copyright 1998-2007 Bruce Tomlin
+// asmx.h - copyright 1998-2009 Bruce Tomlin
 
 #ifndef _ASMX_H_
 #define _ASMX_H_
@@ -6,6 +6,7 @@
 #define MAX_BYTSTR  1024    // size of bytStr[]
 
 #include <stdio.h>
+#include <sys/types.h>
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
@@ -20,9 +21,8 @@ typedef unsigned long  u_long;
 #endif
 
 // a few useful typedefs
-typedef unsigned char  bool;    // i guess bool is a c++ thing
-#define FALSE 0
-#define TRUE  1
+typedef unsigned char  bool;    // define a bool type
+enum { FALSE = 0, TRUE = 1 };
 typedef char Str255[256];       // generic string type
 
 #define maxOpcdLen  11          // max opcode length (for building opcode table)
@@ -35,6 +35,13 @@ struct OpcdRec
 };
 typedef struct OpcdRec *OpcdPtr;
 
+// CPU option flags
+enum
+{
+    OPT_ATSYM     = 0x01,   // allow symbols to start with '@'
+    OPT_DOLLARSYM = 0x02,   // allow symbols to start with '$'
+};
+
 void *AddAsm(char *name,        // assembler name
               int (*DoCPUOpcode) (int typ, int parm),
               int (*DoCPULabelOp) (int typ, int parm, char *labl),
@@ -46,6 +53,7 @@ void AddCPU(void *as,           // assembler for this CPU
             int addrWid,        // assembler 32-bit
             int listWid,        // listing width
             int wordSize,       // addressing word size in bits
+            int opts,           // option flags
             struct OpcdRec opcdTab[]); // assembler opcode table
 
 // assembler endian, address width, and listing hex width settings
@@ -80,6 +88,7 @@ void MissingOperand();
 void BadMode();
 int FindReg(const char *regName, const char *regList);
 int GetReg(const char *regList);
+int CheckReg(int reg);
 int Eval(void);
 void CheckByte(int val);
 void CheckStrictByte(int val);
@@ -120,6 +129,7 @@ void InstrW(u_short w1);
 void InstrWW(u_short w1, u_short w2);
 void InstrWL(u_short w1, u_long l1);
 void InstrL(u_long l1);
+void InstrLL(u_long l1, u_long l2);
 
 //char * ListStr(char *l, char *s);
 char * ListByte(char *p, u_char b);
