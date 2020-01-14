@@ -8,13 +8,13 @@ VERSION = 2.0b5
 #   this is the setting for OS X to create a universal PPC/Intel binary
 #   comment it out if you aren't running OS X for Intel
 #TARGET_ARCH = -arch ppc
-TARGET_ARCH = -arch ppc -arch i686
+#TARGET_ARCH = -arch ppc -arch i686
 
 # C compiler flags
 CFLAGS = -Wall -O2 -DVERSION=\"$(VERSION)\"
 
 # install directory in ~/bin or wherever you want it
-INSTALL_DIR = ~/bin
+INSTALL_DIR = $(HOME)/.local/bin
 
 OBJS := $(patsubst %.c,%.o,$(wildcard *.c))
 
